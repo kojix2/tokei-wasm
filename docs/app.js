@@ -169,9 +169,7 @@ function showResults() {
   if (warnings.length) {note.textContent = warnings.join(' '); note.classList.remove('hidden');}
   else note.classList.add('hidden');
   $('#results').classList.remove('hidden');
-  renderTable(); renderComposition();
-  $('#badges').replaceChildren();
-  if ($('#badge-options').open) renderBadges();
+  renderTable(); renderCharts();
   $('#results').scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 
@@ -272,63 +270,48 @@ $('#language-table thead').addEventListener('click', (e) => {
   renderTable();
 });
 
-function renderComposition() {
+function renderCharts() {
+  const languages = languageEntries().sort((a, b) => b[1].code - a[1].code).slice(0, 8);
+  const maxCode = Math.max(1, ...languages.map(([, stats]) => stats.code));
+  $('#language-chart').replaceChildren(...languages.map(([name, stats]) => {
+    const row = document.createElement('li');
+    row.setAttribute('aria-label', `${name}: ${fmt(stats.code)} lines of code`);
+    const label = document.createElement('span');
+    label.className = 'chart-language'; label.textContent = name; label.title = name;
+    const track = document.createElement('span'); track.className = 'bar-track';
+    track.setAttribute('aria-hidden', 'true');
+    const bar = document.createElement('span'); bar.style.width = `${100 * stats.code / maxCode}%`;
+    track.append(bar);
+    const value = document.createElement('span'); value.className = 'chart-value'; value.textContent = fmt(stats.code);
+    row.append(label, track, value);
+    return row;
+  }));
+
   const total = current.results.Total;
   const lines = lineTotal(total);
+  const items = [['Code', total.code, '#555'], ['Comments', total.comments, '#aaa'], ['Blanks', total.blanks, '#e3e3e3']];
   const labels = [];
-  const segments = ['code', 'comments', 'blanks'].map(key => {
-    const share = lines ? 100 * total[key] / lines : 0;
-    const segment = document.createElement('span');
-    segment.style.width = `${share}%`;
-    labels.push(`${key[0].toUpperCase() + key.slice(1)} ${Math.round(share)}%`);
-    return segment;
-  });
-  $('#composition-bar').replaceChildren(...segments);
-  $('#composition-bar').setAttribute('aria-label', labels.join(' · '));
-  $('#composition-legend').textContent = labels.join(' · ');
+  const stops = [];
+  let position = 0;
+  $('#composition-legend').replaceChildren(...items.map(([label, value, color]) => {
+    const share = lines ? 100 * value / lines : 0;
+    stops.push(`${color} ${position}% ${position + share}%`);
+    position += share;
+    labels.push(`${label} ${Math.round(share)}%`);
+    const row = document.createElement('li');
+    const swatch = document.createElement('i'); swatch.style.background = color;
+    swatch.setAttribute('aria-hidden', 'true');
+    const name = document.createElement('span'); name.textContent = label;
+    const count = document.createElement('strong'); count.textContent = fmt(value);
+    const percent = document.createElement('small'); percent.textContent = `${Math.round(share)}%`;
+    row.append(swatch, name, count, percent);
+    return row;
+  }));
+  $('#composition-chart').style.background = lines ? `conic-gradient(${stops.join(', ')})` : '#eee';
+  $('#composition-chart').setAttribute('aria-label', labels.join(' · '));
+  $('#chart-lines').textContent = fmt(lines);
 }
 
-function markdownBadges() {
-  const total = current.results.Total;
-  const languages = languageEntries().sort((a,b)=>b[1].code-a[1].code);
-  const top = languages[0]?.[0] || 'Unknown';
-  const ratio = total.comments ? (total.code/total.comments).toFixed(1) : 'N/A';
-  const where = current.detail ? `${location.origin}${location.pathname}?repo=${encodeURIComponent(`${current.detail.owner}/${current.detail.repo}`)}` : location.href.split('?')[0];
-  return [
-    ['Lines of Code','LOC',fmt(total.code)],
-    ['Top Language','Top_language',top],
-    ['Languages','Languages',String(languages.length)],
-    ['Code / Comment','Code_to_comment',ratio],
-  ].map(([title,label,value])=> {
-    const encodedVal = encodeURIComponent(value).replace(/-/g,'--').replace(/_/g,'__');
-    const url = `https://img.shields.io/badge/${label}-${encodedVal}-555`;
-    return {title,url,markdown:`[![${title}](${url})](${where})`};
-  });
-}
-async function copyText(text,button) {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    const textarea=document.createElement('textarea');textarea.value=text;document.body.append(textarea);
-    textarea.select();
-    let copied = false;
-    try {copied = document.execCommand('copy');} finally {textarea.remove();}
-    if (!copied) {button.textContent='Copy failed';setTimeout(()=>button.textContent='Copy MD',1300);return;}
-  }
-  const old=button.textContent;button.textContent='Copied!';setTimeout(()=>button.textContent=old,1300);
-}
-function renderBadges(){const box=$('#badges');box.replaceChildren();
-  for (const {title,url,markdown} of markdownBadges()) {
-    const item=document.createElement('div');item.className='badge-item';
-    const left=document.createElement('div');const label=document.createElement('span');label.textContent=title;
-    const img=document.createElement('img');img.src=url;img.alt=title;
-    left.append(label,img);const button=document.createElement('button');button.textContent='Copy MD';
-    button.addEventListener('click',()=>copyText(markdown,button));item.append(left,button);box.append(item);
-  }
-}
-$('#badge-options').addEventListener('toggle', event => {
-  if (event.target.open && current && !$('#badges').children.length) renderBadges();
-});
 function downloadBlob(content, filename, type) {
   const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download=filename;a.click();

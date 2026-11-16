@@ -72,8 +72,19 @@
         <div><dt>Files</dt><dd id="stat-files">—</dd></div>
         <div><dt>Total lines</dt><dd id="stat-lines">—</dd></div>
       </dl>
-      <div id="composition-bar" role="img" aria-label="Line composition"></div>
-      <p class="helper" id="composition-legend"></p>
+      <div class="charts">
+        <figure>
+          <figcaption><h3>Code by language</h3><span class="helper">Top 8</span></figcaption>
+          <ol id="language-chart" class="language-chart" aria-label="Lines of code by language"></ol>
+        </figure>
+        <figure>
+          <figcaption><h3>Line composition</h3></figcaption>
+          <div id="composition-chart" class="donut" role="img" aria-label="Line composition">
+            <div class="donut-center"><strong id="chart-lines">0</strong><span>Total lines</span></div>
+          </div>
+          <ul id="composition-legend" class="chart-legend"></ul>
+        </figure>
+      </div>
 
       <div class="table-heading">
         <h3>Languages</h3>
@@ -94,11 +105,6 @@
           <tfoot id="table-foot"></tfoot>
         </table>
       </div>
-      <details class="badges-section" id="badge-options">
-        <summary>README badges</summary>
-        <p class="helper">Static snapshots. Copy as Markdown.</p>
-        <div id="badges"></div>
-      </details>
     </section>
   </main>
 

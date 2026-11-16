@@ -20,19 +20,25 @@ async function downloadText(download) {
 }
 
 test.beforeEach(async ({page}) => {
-  // Badge previews are external assets; analysis itself always uses real Wasm.
-  await page.context().route('https://img.shields.io/**', route => route.fulfill({status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="90" height="20"/>'}));
   await page.goto('/');
 });
 
 test('local analysis, details, search, sorting, and exports', async ({page}) => {
   const errors = [];
+  const externalRequests = [];
   page.on('pageerror', error => errors.push(error.message));
+  page.on('request', request => {
+    if (new URL(request.url()).origin !== new URL(page.url()).origin) externalRequests.push(request.url());
+  });
   await selectFiles(page, [...samples, source('binary.rs', '\0binary')]);
   await expect(page.locator('#stat-code')).toHaveText('2');
   await expect(page.locator('#stat-files')).toHaveText('2');
   await expect(page.locator('#stat-lines')).toHaveText('6');
-  await expect(page.locator('#composition-bar')).toHaveAttribute('aria-label', 'Code 33% · Comments 33% · Blanks 33%');
+  await expect(page.locator('#composition-chart')).toHaveAttribute('aria-label', 'Code 33% · Comments 33% · Blanks 33%');
+  await expect(page.locator('#chart-lines')).toHaveText('6');
+  await expect(page.locator('#language-chart li')).toHaveCount(2);
+  await expect(page.locator('#language-chart')).toContainText('Rust');
+  await expect(page.locator('#composition-legend')).toContainText('Comments');
   await expect(page.locator('#warning-box')).toContainText('1 binary or unreadable');
   const row = page.locator('.language-row').filter({hasText: 'Rust'});
   await row.click();
@@ -58,17 +64,36 @@ test('local analysis, details, search, sorting, and exports', async ({page}) => 
   const csv = await downloadText(await csvEvent);
   expect(csv).toContain('"Rust","main.rs","1","1","1","3"');
   expect(csv).toContain('"Python","test.py","1","1","1","3"');
-  await page.evaluate(() => {
-    window.copiedBadge = '';
-    Object.defineProperty(navigator, 'clipboard', {configurable: true, value: {writeText: async value => {window.copiedBadge = value;}}});
-  });
-  await expect(page.locator('#badges')).toBeEmpty();
-  await page.locator('#badge-options summary').click();
-  await page.locator('.badge-item button').first().click();
-  await expect(page.locator('.badge-item button').first()).toHaveText('Copied!');
-  expect(await page.evaluate(() => window.copiedBadge)).toContain('[![Lines of Code]');
   expect(errors).toEqual([]);
+  expect(externalRequests).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('charts update with new results and handle files with no lines or code', async ({page}) => {
+  await selectFiles(page);
+  await selectFiles(page, [source('only.rs', 'fn a() {}\nfn b() {}\n// comment\n')]);
+  await expect(page.locator('#language-chart li')).toHaveCount(1);
+  await expect(page.locator('#language-chart li')).toHaveAttribute('aria-label', 'Rust: 2 lines of code');
+  await expect(page.locator('#composition-chart')).toHaveAttribute('aria-label', 'Code 67% · Comments 33% · Blanks 0%');
+  await expect(page.locator('#chart-lines')).toHaveText('3');
+  await selectFiles(page, [source('empty.rs', '')]);
+  await expect(page.locator('#chart-lines')).toHaveText('0');
+  await expect(page.locator('#composition-chart')).toHaveAttribute('aria-label', 'Code 0% · Comments 0% · Blanks 0%');
+  await expect(page.locator('#language-chart li')).toHaveAttribute('aria-label', 'Rust: 0 lines of code');
+  await selectFiles(page, [source('comments.rs', '// comment\n\n')]);
+  await expect(page.locator('#chart-lines')).toHaveText('2');
+  await expect(page.locator('#composition-chart')).toHaveAttribute('aria-label', 'Code 0% · Comments 50% · Blanks 50%');
+});
+
+test('language chart shows the top eight without changing when the table is filtered', async ({page}) => {
+  const extensions = ['rs', 'py', 'js', 'ts', 'css', 'rb', 'cr', 'go', 'c', 'java'];
+  await selectFiles(page, extensions.map((extension, index) => source(`source.${extension}`, 'x\n'.repeat(10 - index))));
+  await expect(page.locator('#stat-languages')).toHaveText('10');
+  await expect(page.locator('#language-chart li')).toHaveCount(8);
+  await expect(page.locator('#language-chart li').first()).toHaveAttribute('aria-label', 'Rust: 10 lines of code');
+  await expect(page.locator('#language-chart li').last()).toHaveAttribute('aria-label', 'Go: 3 lines of code');
+  await page.locator('#language-search').fill('Java');
+  await expect(page.locator('#language-chart li')).toHaveCount(8);
 });
 
 test('folder selection excludes dependencies and retains relative filenames', async ({page}) => {

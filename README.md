@@ -27,12 +27,12 @@ Use an HTTP server; opening `index.html` via `file://` cannot load browser modul
 - Analyze public GitHub repository root URLs, `owner/repository`, or GitHub SSH-style URLs. A `?repo=owner/repository` link starts analysis automatically.
 - Analyze local folders, individual files, or dropped folders/files without uploading source contents.
 - Count code, comments, and blank lines with upstream tokei, including nested comments, strings, and embedded languages.
-- View a compact line-composition bar and expand file-level counts; search filenames/languages and sort the table.
+- View language bar charts and a code/comment/blank-line donut chart. Expand file-level counts, search filenames/languages, and sort the table.
 - Cancel immediately and start another analysis. Failed/binary files and browser limits are reported without discarding successful results.
-- Download JSON including results, warnings, omitted-file counts, engine version, analysis time, and GitHub revision. Download per-file CSV and copy static README badges.
+- Download JSON including results, warnings, omitted-file counts, engine version, analysis time, and GitHub revision, or download per-file CSV.
 - Use the interface on desktop and mobile, with keyboard tabs, expandable rows, and status announcements.
 
-GitHub analysis pins downloads and source links to the same commit, so a moving branch does not mix revisions. Local analysis needs no GitHub access. Badge previews load from Shields.io only when the README badges section is opened and contain only the displayed badge values.
+GitHub analysis pins downloads and source links to the same commit, so a moving branch does not mix revisions. Local analysis and charts run entirely in the browser, with no third-party chart or image service.
 
 ## Deploy to GitHub Pages
 
@@ -74,7 +74,7 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-Tests cover local folders/files, dropped files, summaries, search/sorting, downloads, badge copying, GitHub deep links/revision links, cancellation, errors, and retrying. Both desktop and mobile viewports run in Chromium. To use an existing Chrome installation, set `CHROME_PATH=/path/to/chrome`.
+Tests cover local folders/files, dropped files, summaries/charts, search/sorting, downloads, GitHub deep links/revision links, cancellation, errors, and retrying. Both desktop and mobile viewports run in Chromium. To use an existing Chrome installation, set `CHROME_PATH=/path/to/chrome`.
 
 ## Design and limits
 
@@ -93,7 +93,7 @@ Local File objects ─────────┘                               
 - Language detection uses file extensions and common special filenames; it does not inspect extensionless shebangs. Repository totals can differ from the native CLI's filesystem traversal.
 - Embedded counts are included in the host file's summarized statistics and retained in its JSON `embedded` field. A `.html` file containing JavaScript remains listed under HTML.
 - GitHub supports public repositories only. API rate limits, CORS/network errors, and truncated repository trees are reported. Empty repositories and selections without readable source files return errors.
-- README badges are snapshots and do not update automatically. Dynamic API endpoints, database caches, and server-generated badges from the original project are outside this static edition.
+- Dynamic API endpoints and database caches from the original project are outside this static edition.
 
 ## Licensing
 
