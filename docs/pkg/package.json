@@ -1,0 +1,17 @@
+{
+  "name": "tokei-wasm",
+  "type": "module",
+  "description": "Browser WebAssembly adapter for the original Rust tokei engine",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "tokei_wasm_bg.wasm",
+    "tokei_wasm.js",
+    "tokei_wasm.d.ts"
+  ],
+  "main": "tokei_wasm.js",
+  "types": "tokei_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Count code, comments and blank lines in your browser.">
+  <meta name="theme-color" content="#ffffff">
+  <title>tokei</title>
+  <link rel="icon" type="image/png" href="favicon-32x32.png">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <noscript><p class="alert">Enable JavaScript to analyze source files in your browser.</p></noscript>
+  <div id="activity-status" class="visually-hidden" role="status" aria-live="polite"></div>
+
+  <header class="site-header">
+    <h1><a href="./">tokei</a> <span>/ wasm</span></h1>
+    <a href="https://github.com/kojix2/tokei-api" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+  </header>
+
+  <main>
+    <p class="intro">Count code, comments and blank lines. All in your browser.</p>
+
+    <section aria-label="Analyze source code">
+      <div class="tabs" role="tablist" aria-label="Source selection">
+        <button type="button" id="tab-github" aria-selected="true" role="tab" aria-controls="github-panel">GitHub</button>
+        <button type="button" id="tab-local" aria-selected="false" tabindex="-1" role="tab" aria-controls="local-panel">Local files</button>
+      </div>
+      <div id="github-panel" role="tabpanel" aria-labelledby="tab-github">
+        <form id="github-form">
+          <label class="visually-hidden" for="repo-url">Public GitHub repository</label>
+          <div class="form-row">
+            <input id="repo-url" type="text" placeholder="owner/repository or GitHub URL" autocomplete="url" spellcheck="false" required>
+            <button type="submit" class="primary" id="analyze-button">Analyze</button>
+          </div>
+          <p class="helper">Public repositories. Try <button type="button" id="example" class="text-button">kojix2/tokei-api</button>.</p>
+        </form>
+      </div>
+      <div class="hidden" id="local-panel" role="tabpanel" aria-labelledby="tab-local">
+        <div class="file-drop" id="drop-zone">
+          <p>Drop a folder or source files here.</p>
+          <div class="actions">
+            <button type="button" id="choose-folder">Choose folder</button>
+            <button type="button" id="choose-files">Choose files</button>
+          </div>
+          <p class="helper">Files stay on your device.</p>
+          <input type="file" id="folder-input" aria-label="Choose a source folder" webkitdirectory directory multiple hidden>
+          <input type="file" id="files-input" aria-label="Choose source files" multiple hidden>
+        </div>
+      </div>
+      <div class="progress-box hidden" id="progress-box" role="status" aria-live="polite">
+        <div class="progress-top"><span id="progress-label">Loading…</span><span id="progress-count"></span><button id="cancel" class="text-button" type="button">Cancel</button></div>
+        <progress id="progress-fill" max="100" aria-label="Analysis progress"></progress>
+      </div>
+      <div class="alert hidden" id="error-alert" role="alert"></div>
+      <details class="limits">
+        <summary>Limits &amp; counting rules</summary>
+        <p>Up to 1,200 source files, 1.5 MB per file and 25 MB total. Dependency and build folders are excluded; ignore files are not applied. Counts use Rust tokei 15.0.0.</p>
+      </details>
+    </section>
+
+    <section id="results" class="results hidden" aria-labelledby="results-title">
+      <div class="section-heading">
+        <div><h2 id="results-title">Results</h2><p class="helper" id="results-subtitle"></p></div>
+        <div class="actions"><button type="button" id="download-json">JSON</button><button type="button" id="download-csv">CSV</button></div>
+      </div>
+      <div id="warning-box" class="warning hidden"></div>
+      <dl class="stats">
+        <div><dt>Code</dt><dd id="stat-code">—</dd></div>
+        <div><dt>Languages</dt><dd id="stat-languages">—</dd></div>
+        <div><dt>Files</dt><dd id="stat-files">—</dd></div>
+        <div><dt>Total lines</dt><dd id="stat-lines">—</dd></div>
+      </dl>
+      <div id="composition-bar" role="img" aria-label="Line composition"></div>
+      <p class="helper" id="composition-legend"></p>
+
+      <div class="table-heading">
+        <h3>Languages</h3>
+        <label class="visually-hidden" for="language-search">Filter languages or files</label>
+        <input type="search" id="language-search" placeholder="Filter languages or files…" spellcheck="false">
+      </div>
+      <div class="table-scroll">
+        <table id="language-table">
+          <thead><tr>
+            <th><button data-sort="name">Language</button></th>
+            <th><button data-sort="files">Files</button></th>
+            <th><button data-sort="code">Code</button></th>
+            <th><button data-sort="comments">Comments</button></th>
+            <th><button data-sort="blanks">Blanks</button></th>
+            <th><button data-sort="total">Total</button></th>
+          </tr></thead>
+          <tbody id="language-rows"></tbody>
+          <tfoot id="table-foot"></tfoot>
+        </table>
+      </div>
+      <details class="badges-section" id="badge-options">
+        <summary>README badges</summary>
+        <p class="helper">Static snapshots. Copy as Markdown.</p>
+        <div id="badges"></div>
+      </details>
+    </section>
+  </main>
+
+  <footer>Powered by <a href="https://github.com/XAMPPRocky/tokei" target="_blank" rel="noopener noreferrer">Rust tokei</a>.</footer>
+</body>
+</html>
