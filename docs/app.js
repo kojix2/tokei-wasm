@@ -36,7 +36,7 @@ $('.tabs').addEventListener('keydown', ev => {
     $('#tab-github').getAttribute('aria-selected') === 'true' ? 'local' : 'github';
   setTab(name); $(`#tab-${name}`).focus();
 });
-$('#example').addEventListener('click', () => {$('#repo-url').value = 'https://github.com/kojix2/tokei-api'; $('#repo-url').focus();});
+$('#example').addEventListener('click', () => {$('#repo-url').value = 'https://github.com/kojix2/tokei-wasm'; $('#repo-url').focus();});
 
 function setBusy(value) {
   busy = value;
