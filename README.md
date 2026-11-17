@@ -98,4 +98,4 @@ Local File objects ─────────┘                               
 
 ## Licensing
 
-This wrapper is MIT-licensed. The original [tokei-api](https://github.com/kojix2/tokei-api) inspired this browser adaptation. Upstream [Rust tokei](https://github.com/XAMPPRocky/tokei) is MIT OR Apache-2.0; its parser is obtained from crates.io and linked into the generated Wasm. Redistributed license notices are included in `docs/third-party/`.
+MIT-licensed. 
