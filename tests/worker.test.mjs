@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import {after, before, beforeEach, test} from 'node:test';
 import {readFileSync} from 'node:fs';
+import {compressedArchive, refs, revision} from './helpers/archive.mjs';
+import {sourceforgeHTML} from './helpers/sourceforge.mjs';
 
 const wasm = readFileSync(new URL('../packages/wasm/pkg/tokei_wasm_bg.wasm', import.meta.url));
 const originalFetch = globalThis.fetch;
@@ -137,4 +139,175 @@ test('invalid URLs and GitHub failures produce actionable errors', async () => {
   route = () => new Response('', {status: 409});
   await onMessage({data: {type: 'github', url: 'acme/demo'}});
   assert.match(last().message, /empty/);
+});
+
+test('GitLab follows all tree pages and fetches immutable blobs for nested namespaces', async () => {
+  const requests = [];
+  route = async url => {
+    requests.push(url);
+    const base = 'https://gitlab.com/api/v4/projects/team%2Fsubgroup%2Fdemo';
+    if (url === base) return Response.json({default_branch: 'feature/test'});
+    if (url === `${base}/repository/commits/feature%2Ftest`) return Response.json({id: revision});
+    if (url.includes('/repository/tree?')) return Response.json(url.endsWith('page=1') ?
+      [{id: 'blob1', path: 'src/main.rs', mode: '100644', type: 'blob'}] : url.endsWith('page=2') ?
+      [{id: 'blob2', path: 'lib.py', mode: '100644', type: 'blob'}] : []);
+    if (url.endsWith('/repository/blobs/blob1/raw')) return new Response('fn main() {}\n// hi\n');
+    if (url.endsWith('/repository/blobs/blob2/raw')) return new Response('x = 1\n');
+    throw Error(`Unexpected URL ${url}`);
+  };
+  await onMessage({data: {type: 'repository', url: 'https://gitlab.com/team/subgroup/demo/-/tree/main'}});
+  assert.equal(last().type, 'result', last().message);
+  assert.equal(last().data.results.Total.files, 2);
+  assert.equal(last().data.results.Total.code, 2);
+  assert.equal(last().data.detail.provider, 'gitlab');
+  assert.equal(last().data.detail.revision, revision);
+  assert.ok(requests.some(url => url.endsWith('page=3')));
+  assert.ok(requests.filter(url => url.includes('/repository/tree?')).every(url => url.includes(`ref=${revision}`)));
+});
+
+test('Forgejo handles server-clamped tree page sizes, immutable downloads and symlinks', async () => {
+  const requests = [];
+  route = async url => {
+    requests.push(url);
+    const base = 'https://codeberg.org/api/v1/repos/acme/demo';
+    if (url === base) return Response.json({default_branch: 'main'});
+    if (url === `${base}/git/commits/main`) return Response.json({sha: revision});
+    if (url.includes('/git/trees/')) return Response.json({total_count: 3, truncated: true,
+      tree: url.endsWith('page=1') ? [{path: 'src/a b.rs', type: 'blob', mode: '100644', size: 20},
+        {path: 'link.rs', type: 'blob', mode: '120000', size: 2}] :
+        [{path: 'lib.py', type: 'blob', mode: '100644', size: 10}]});
+    if (url.includes('/raw/')) return new Response('x\n');
+    throw Error(`Unexpected URL ${url}`);
+  };
+  await onMessage({data: {type: 'repository', url: 'https://codeberg.org/acme/demo/src/branch/other'}});
+  assert.equal(last().type, 'result', last().message);
+  assert.equal(last().data.results.Total.files, 2);
+  assert.ok(requests.some(url => url.endsWith('page=2')));
+  assert.ok(requests.includes(`https://codeberg.org/api/v1/repos/acme/demo/raw/src/a%20b.rs?ref=${revision}`));
+});
+
+test('custom GitLab and Forgejo servers use only the selected origin', async () => {
+  for (const provider of ['gitlab', 'forgejo']) {
+    const requests = [];
+    route = async url => {
+      requests.push(url);
+      if (url.includes('/tree?')) return Response.json(url.endsWith('page=1') ? [{path: 'main.rs', id: 'blob', type: 'blob'}] : []);
+      if (url.includes('/git/trees/')) return Response.json({tree: [{path: 'main.rs', type: 'blob'}], truncated: false});
+      if (url.endsWith('/commits/main')) return Response.json({id: revision, sha: revision});
+      if (url.includes('/raw')) return new Response('fn main() {}\n');
+      return Response.json({default_branch: 'main'});
+    };
+    await onMessage({data: {type: 'repository', url: 'https://git.example.org/acme/demo', provider}});
+    assert.equal(last().type, 'result', last().message);
+    assert.ok(requests.every(url => new URL(url).origin === 'https://git.example.org'));
+  }
+});
+
+test('Gitee uses public raw URLs at the pinned commit instead of authenticated raw API', async () => {
+  const requests = [];
+  route = async url => {
+    requests.push(url);
+    if (url === 'https://gitee.com/api/v5/repos/acme/demo') return Response.json({default_branch: 'master'});
+    if (url.endsWith('/commits/master')) return Response.json({sha: revision});
+    if (url.includes('/git/trees/')) return Response.json({tree: [{path: 'main.rs', type: 'blob'}], truncated: true});
+    if (url === `https://gitee.com/acme/demo/raw/${revision}/main.rs`) return new Response('fn main() {}\n');
+    throw Error(`Unexpected URL ${url}`);
+  };
+  await onMessage({data: {type: 'repository', url: 'https://gitee.com/acme/demo'}});
+  assert.equal(last().type, 'result', last().message);
+  assert.equal(last().data.results.Total.code, 1);
+  assert.match(last().data.warnings[0], /Gitee truncated/);
+  assert.ok(!requests.some(url => url.includes('/api/v5/repos/acme/demo/raw')));
+});
+
+test('sourcehut reads public Git refs and a bounded commit archive without GraphQL authentication', async () => {
+  const requests = [];
+  route = async url => {
+    requests.push(url);
+    if (url.endsWith('/info/refs?service=git-upload-pack')) return new Response(refs);
+    if (url.endsWith(`/archive/${revision}.tar.gz`)) return new Response(compressedArchive());
+    throw Error(`Unexpected URL ${url}`);
+  };
+  await onMessage({data: {type: 'repository', url: 'https://git.sr.ht/~alice/demo/tree/other'}});
+  assert.equal(last().type, 'result', last().message);
+  assert.equal(last().data.results.Rust.code, 1);
+  assert.equal(last().data.results.Rust.comments, 1);
+  assert.equal(last().data.detail.revision, revision);
+  assert.equal(last().data.detail.ref, 'main');
+  assert.equal(last().data.results.Rust.reports[0].name, 'src/main.rs');
+  assert.equal(requests.length, 2);
+});
+
+test('Bitbucket walks all directory pages at the default-branch commit and ignores links/build directories', async () => {
+  const requests = [];
+  const base = 'https://api.bitbucket.org/2.0/repositories/acme/demo';
+  route = async url => {
+    requests.push(url);
+    if (url === base) return Response.json({scm: 'git', mainbranch: {name: 'feature/test'}});
+    if (url === base + '/refs/branches/feature%2Ftest') return Response.json({target: {hash: revision}});
+    if (url === `${base}/src/${revision}/?pagelen=100`) return Response.json({values: [
+      {path: 'src', type: 'commit_directory'}, {path: 'node_modules', type: 'commit_directory'},
+      {path: 'link.rs', type: 'commit_file', attributes: ['link']}], next: '?pagelen=100&page=2'});
+    if (url.endsWith('page=2')) return Response.json({values: [{path: 'main.py', type: 'commit_file', size: 2}]});
+    if (url === `${base}/src/${revision}/src/?pagelen=100`) return Response.json({values: [{path: 'src/main.rs', type: 'commit_file', size: 10}]});
+    if (url.startsWith(`${base}/src/${revision}/`)) return new Response('x\n');
+    throw Error('Unexpected URL ' + url);
+  };
+  await onMessage({data: {type: 'repository', url: 'https://bitbucket.org/acme/demo/src/other/'}});
+  assert.equal(last().type, 'result', last().message);
+  assert.equal(last().data.results.Total.files, 2);
+  assert.equal(last().data.detail.revision, revision);
+  assert.ok(!requests.some(url => /node_modules|link\.rs/.test(url)));
+});
+
+for (const [prefix, type] of [['', 'model'], ['datasets/', 'dataset'], ['spaces/', 'space']]) {
+  test(`Hugging Face ${type} pins pagination and skips LFS/Xet assets without downloading weights`, async () => {
+    const requests = [];
+    route = async url => {
+      requests.push(url);
+      const base = `https://huggingface.co/api/${type}s/acme/demo`;
+      if (url === base) return Response.json({sha: revision, gated: false, private: false});
+      if (url.includes('/tree/')) return url.includes('cursor=next') ? Response.json([{path: 'config.json', type: 'file', size: 3}]) :
+        Response.json([{path: 'app.py', type: 'file', size: 5}, {path: 'model.safetensors', type: 'file', size: 5e9, lfs: {size: 5e9}},
+          {path: 'huge.json', type: 'file', size: 500e6, xetHash: 'blob'}], {headers: {Link: `<?cursor=next>; rel="next"`}});
+      if (url.includes(`/raw/${revision}/`)) return new Response(url.endsWith('app.py') ? 'x = 1\n' : '{}\n');
+      throw Error('Unexpected URL ' + url);
+    };
+    await onMessage({data: {type: 'repository', url: `https://huggingface.co/${prefix}acme/demo`}});
+    assert.equal(last().type, 'result', last().message);
+    assert.equal(last().data.results.Total.files, 2);
+    assert.equal(last().data.detail.repoType, type);
+    assert.equal(last().data.detail.revision, revision);
+    assert.match(last().data.warnings.join(' '), /2 Git LFS\/Xet assets/);
+    assert.ok(!requests.some(url => /model\.safetensors|huge\.json/.test(url)));
+  });
+}
+
+test('gated Hugging Face repositories fail before listing or downloading files', async () => {
+  route = async () => Response.json({sha: revision, gated: 'manual'});
+  await onMessage({data: {type: 'repository', url: 'https://huggingface.co/acme/demo'}});
+  assert.equal(last().type, 'error');
+  assert.match(last().message, /private, gated, or disabled/);
+});
+
+test('SourceForge validates Git tools, pins HEAD and walks the code tree without executing page scripts', async () => {
+  const requests = [];
+  const root = `https://sourceforge.net/p/acme/code/ci/${revision}/tree/`;
+  route = async url => {
+    requests.push(url);
+    if (url === 'https://sourceforge.net/rest/p/acme/code/') return Response.json({name: 'git'});
+    if (url === 'https://git.code.sf.net/p/acme/code/info/refs?service=git-upload-pack') return new Response(refs);
+    if (url.endsWith('?format=raw')) return new Response('fn main() {}\n');
+    if (url === root) return new Response(sourceforgeHTML([['src', true], ['node_modules', true], ['main.py']]));
+    if (url === root + 'src/') return new Response(sourceforgeHTML([['main.rs']]));
+    throw Error('Unexpected URL ' + url);
+  };
+  await onMessage({data: {type: 'repository', url: 'https://sourceforge.net/p/acme/code/ci/other/tree/'}});
+  assert.equal(last().type, 'result', last().message);
+  assert.equal(last().data.results.Total.files, 2);
+  assert.equal(last().data.detail.revision, revision);
+  assert.ok(!requests.some(url => url.includes('node_modules')));
+  route = async () => Response.json({name: 'svn'});
+  await onMessage({data: {type: 'repository', url: 'https://sourceforge.net/p/acme/code'}});
+  assert.match(last().message, /requires a Git code repository/);
 });

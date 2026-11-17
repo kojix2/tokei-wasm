@@ -116,3 +116,9 @@ footer { margin: 45px 0 24px; }
   th, td { padding: 10px; }
   .charts { grid-template-columns: 1fr; gap: 30px; }
 }
+
+.server-options { margin-top: 10px; font-size: 13px; color: var(--muted); }
+.server-options label { display: inline-block; margin: 8px 8px 0 0; }
+.server-options select { font: inherit; color: inherit; padding: 4px 8px; background: white; border: 1px solid var(--border); border-radius: 5px; }
+.hosting-support { overflow-wrap: anywhere; }
+#open-details { display: none; }

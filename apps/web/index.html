@@ -15,26 +15,40 @@
   <div id="activity-status" class="visually-hidden" role="status" aria-live="polite"></div>
 
   <header class="site-header">
-    <h1><a href="./">tokei</a> <span>/ wasm</span></h1>
+    <h1><a href="index.html">tokei</a> <span>/ wasm</span></h1>
+    <!-- extension-only -->
+    <button type="button" id="open-details">Open details ↗</button>
+    <!-- /extension-only -->
     <a href="https://github.com/kojix2/tokei-wasm" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
   </header>
 
   <main>
     <section aria-label="Analyze source code">
+      <!-- web-only -->
       <div class="tabs" role="tablist" aria-label="Source selection">
         <button type="button" id="tab-github" aria-selected="true" role="tab" aria-controls="github-panel">GitHub</button>
         <button type="button" id="tab-local" aria-selected="false" tabindex="-1" role="tab" aria-controls="local-panel">Local files</button>
       </div>
+      <!-- /web-only -->
       <div id="github-panel" role="tabpanel" aria-labelledby="tab-github">
         <form id="github-form">
-          <label class="visually-hidden" for="repo-url">Public GitHub repository</label>
+          <label class="visually-hidden" for="repo-url">Public Git repository</label>
           <div class="form-row">
-            <input id="repo-url" type="text" placeholder="owner/repository or GitHub URL" autocomplete="url" spellcheck="false" required>
+            <input id="repo-url" type="text" placeholder="Repository URL or GitHub owner/repository" autocomplete="url" spellcheck="false" required>
             <button type="submit" class="primary" id="analyze-button">Analyze</button>
           </div>
           <p class="helper">Try <button type="button" id="example" class="text-button">kojix2/tokei-wasm</button>.</p>
+          <!-- extension-only -->
+          <p class="helper hosting-support">GitHub · GitLab · Codeberg · Forgejo / Gitea · sourcehut · Gitee · Bitbucket · SourceForge · Hugging Face</p>
+          <details class="server-options">
+            <summary>Other Git servers</summary>
+            <label for="repository-provider">Server type</label>
+            <select id="repository-provider"><option value="auto">Automatic</option><option value="gitlab">GitLab</option><option value="forgejo">Forgejo / Gitea</option></select>
+          </details>
+          <!-- /extension-only -->
         </form>
       </div>
+      <!-- web-only -->
       <div class="hidden" id="local-panel" role="tabpanel" aria-labelledby="tab-local">
         <div class="file-drop" id="drop-zone">
           <p>Drop a folder or source files here.</p>
@@ -47,6 +61,7 @@
           <input type="file" id="files-input" aria-label="Choose source files" multiple hidden>
         </div>
       </div>
+      <!-- /web-only -->
       <div class="progress-box hidden" id="progress-box" role="status" aria-live="polite">
         <div class="progress-top"><span id="progress-label">Loading…</span><span id="progress-count"></span><button id="cancel" class="text-button" type="button">Cancel</button></div>
         <progress id="progress-fill" max="100" aria-label="Analysis progress"></progress>

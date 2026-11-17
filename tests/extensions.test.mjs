@@ -5,8 +5,8 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
-import {repositoryFromURL} from '../packages/extension/repository.js';
-import {registerAction} from '../packages/extension/action.js';
+import {repositoryFromURL} from '../apps/web/repositories.js';
+import {readResult, saveResult, resultRepository, recentResult} from '../packages/extension/results.js';
 import {createManifest, targets, version} from '../scripts/lib/manifests.mjs';
 import {buildApplications} from '../scripts/build.mjs';
 
@@ -36,22 +36,27 @@ test('toolbar rejects non-repository, privileged, deceptive and unavailable URLs
   }
 });
 
-test('registered toolbar click opens a bundled tab with only the repository parameter', async () => {
-  let clicked;
-  const opened = [];
-  registerAction({
-    action: {onClicked: {addListener: listener => {clicked = listener;}}},
-    runtime: {getURL: path => `chrome-extension://test/${path}`},
-    tabs: {create: async options => opened.push(options)},
-  });
-  await clicked({url: 'https://github.com/acme/demo/blob/other/file.rs?secret=discard#fragment'});
-  await clicked({url: 'https://example.com'});
-  await clicked({});
-  await clicked();
-  assert.deepEqual(opened.map(({url}) => url), [
-    'chrome-extension://test/index.html?repo=acme%2Fdemo',
-    ...Array(3).fill('chrome-extension://test/index.html'),
-  ]);
+test('completed result cache survives reopening and expires without mixing repositories', () => {
+  let value = null;
+  const storage = {getItem: () => value, setItem: (_, data) => {value = data;}};
+  const now = Date.now();
+  const data = {detail: {owner: 'acme', repo: 'demo'}, results: {Total: {code: 1}}, warnings: [], analyzedAt: new Date(now).toISOString()};
+  assert.equal(readResult(storage), null);
+  const saved = saveResult(data, storage);
+  assert.deepEqual(readResult(storage), saved);
+  assert.equal(resultRepository(saved), 'acme/demo');
+  assert.ok(recentResult(saved, 'ACME/demo', now));
+  assert.ok(!recentResult(saved, 'acme/other', now));
+  assert.ok(!recentResult(saved, null, now));
+  assert.ok(!recentResult(saved, 'acme/demo', now + 300_000));
+  assert.ok(!recentResult(saved, 'acme/demo', now - 1));
+  value = '{broken';
+  assert.equal(readResult(storage), null);
+  value = '{"id":"broken","data":{}}';
+  assert.equal(readResult(storage), null);
+  const unavailable = {getItem() {throw Error('blocked');}, setItem() {throw Error('quota');}};
+  assert.equal(readResult(unavailable), null);
+  assert.equal(saveResult(data, unavailable), null);
 });
 
 test('packages contain runnable browser-specific manifests, real Wasm and licenses', async () => {
@@ -63,27 +68,37 @@ test('packages contain runnable browser-specific manifests, real Wasm and licens
       assert.deepEqual(manifest, createManifest(target));
       assert.equal(manifest.manifest_version, 3);
       assert.deepEqual(manifest.permissions, ['activeTab']);
-      assert.deepEqual(manifest.host_permissions, ['https://api.github.com/*', 'https://raw.githubusercontent.com/*']);
+      assert.ok(manifest.host_permissions.includes('https://codeberg.org/*'));
+      assert.ok(manifest.host_permissions.includes('https://gitlab.com/*'));
+      assert.ok(manifest.host_permissions.includes('https://git.sr.ht/*'));
+      assert.deepEqual(manifest.optional_host_permissions, ['https://*/*']);
       assert.match(manifest.content_security_policy.extension_pages, /'wasm-unsafe-eval'/);
-      assert.ok(!manifest.action.default_popup);
+      assert.equal(manifest.action.default_popup, 'popup.html');
+      assert.ok(!manifest.background);
       assert.ok(!manifest.content_scripts);
       assert.ok(!manifest.web_accessible_resources);
       if (target === 'chrome') {
-        assert.equal(manifest.background.service_worker, 'background.js');
-        assert.ok(!manifest.background.scripts);
         assert.ok(!manifest.browser_specific_settings);
       } else {
-        assert.deepEqual(manifest.background.scripts, ['background.js']);
-        assert.ok(!manifest.background.service_worker);
         assert.equal(manifest.browser_specific_settings.gecko.id, 'tokei-wasm@kojix2.github.io');
       }
       const wasm = await readFile(join(temporary, target, 'pkg/tokei_wasm_bg.wasm'));
       assert.ok(WebAssembly.validate(wasm));
-      for (const name of ['index.html', 'app.js', 'worker.js', 'languages.js', 'language-colors.js', 'style.css',
-        'background.js', 'action.js', 'repository.js', 'LICENSE', 'third-party/tokei-MIT.txt', 'third-party/tokei-Apache-2.0.txt',
+      for (const name of ['index.html', 'app.js', 'worker.js', 'exclude.js', 'language-colors.js', 'style.css',
+        'popup.html', 'popup.css', 'extension-page.js', 'results.js', 'LICENSE', 'third-party/tokei-MIT.txt', 'third-party/tokei-Apache-2.0.txt',
         'third-party/home-MIT.txt', 'third-party/home-Apache-2.0.txt']) {
         assert.ok((await readFile(join(temporary, target, name))).length, name);
       }
+      const popup = await readFile(join(temporary, target, 'popup.html'), 'utf8');
+      assert.match(popup, /data-extension-view="popup"/);
+      assert.match(popup, /src="extension-page.js"/);
+      assert.match(popup, /href="popup.css"/);
+      assert.doesNotMatch(popup, /local-panel|files-input|folder-input|tab-local|Choose files|Drop a folder/);
+      assert.match(popup, /repository-provider/);
+      const detail = await readFile(join(temporary, target, 'index.html'), 'utf8');
+      assert.match(detail, /data-extension-view="tab"/);
+      assert.match(detail, /src="extension-page.js"/);
+      assert.doesNotMatch(detail, /local-panel|files-input|folder-input|tab-local/);
       assert.deepEqual(await readdir(join(temporary, target, 'pkg')), ['tokei_wasm.js', 'tokei_wasm_bg.wasm']);
       const archive = join(temporary, `tokei-wasm-${target}-${version}.zip`);
       const listing = spawnSync('unzip', ['-Z1', archive], {encoding: 'utf8'});

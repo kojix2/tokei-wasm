@@ -4,9 +4,9 @@ Run commands from the repository root. Start with the [development guide](docs/d
 
 ## Where to make changes
 
-- Update the shared interface, worker, charts, and static assets in `apps/web/`. These files are distributed with all three apps.
+- Update the shared interface, worker, charts, and static assets in `apps/web/`. These files are distributed with all three apps. Use the existing `web-only` / `extension-only` HTML blocks for view-specific controls.
 - Update browser-specific manifests in `apps/chrome/` and `apps/firefox/`.
-- Update shared extension launch behavior and GitHub URL recognition in `packages/extension/`.
+- Update popup startup/permissions and result restoration in `packages/extension/`. Shared URL parsing belongs in `apps/web/repositories.js`, provider retrieval in `hosts.js`, and stream/archive reading in `archive.js`.
 - Update the Rust adapter in `packages/wasm/`; keep the upstream tokei parser unchanged. Rebuild and include `packages/wasm/pkg/` when changing the engine.
 - Update assembly and packaging in `scripts/`, and developer-facing documentation in `docs/`.
 

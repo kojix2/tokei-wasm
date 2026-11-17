@@ -1,4 +1,7 @@
-import {isExcluded} from './languages.js';
+import {isExcluded} from './exclude.js';
+import {readBounded} from './archive.js';
+import {parseRepository} from './repositories.js';
+import {repositoryTree} from './hosts.js';
 
 const MAX_FILES = 1200;
 const MAX_FILE_BYTES = 1_500_000;
@@ -49,81 +52,58 @@ function assemble(rows, title, detail, warnings, skipped) {
   return {title, detail, results: result, warnings, skipped, engine: "Rust tokei 15.0.0 / wasm-bindgen", analyzedAt: new Date().toISOString()};
 }
 
-function parseGitHubURL(input) {
-  let url = String(input || '').trim();
-  const ssh = url.match(/^git@github\.com:([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i);
-  if (ssh) return [ssh[1], ssh[2]];
-  if (/^[\w.-]+\/[\w.-]+$/.test(url)) url = `https://github.com/${url}`;
-  let parsed;
-  try { parsed = new URL(url); } catch { throw Error('Enter a GitHub URL or owner/repository.'); }
-  if (parsed.hostname.toLowerCase() !== 'github.com' || parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.port) {
-    throw Error('Browser mode supports public GitHub repositories only. Use Local Folder for other sources.');
-  }
-  const parts = parsed.pathname.replace(/^\/+|\/+$/g, '').split('/');
-  if (parts.length !== 2 || !/^[\w.-]+$/.test(parts[0]) || !/^[\w.-]+$/.test(parts[1])) {
-    throw Error('Enter a repository root URL: https://github.com/OWNER/REPO');
-  }
-  const repo = parts[1].replace(/\.git$/i, '');
-  if (!repo || parts.some(part => part === '.' || part === '..')) throw Error('Enter a valid owner/repository.');
-  return [parts[0], repo];
-}
-
-async function apiJson(url, signal) {
-  const response = await fetch(url, {signal, headers: {'Accept': 'application/vnd.github+json'}});
-  if (!response.ok) {
-    if (response.status === 403 || response.status === 429) throw Error('GitHub API rate limit or abuse protection reached. Try again later or use Local Folder.');
-    if (response.status === 404) throw Error('Repository not found or private. Only public GitHub repositories are supported.');
-    if (response.status === 409) throw Error('This repository is empty. Choose a repository with source files.');
-    throw Error(`GitHub API HTTP ${response.status}`);
-  }
-  return response.json();
-}
-
 function chooseEntries(entries, warnings, wasm) {
   let totalBytes = 0, skipped = 0;
   const selected = [];
   for (const entry of entries) {
     if (!entry || entry.type !== 'blob' || entry.mode === '120000' || isExcluded(entry.path)) continue;
-    const lang = wasm.detect_language(entry.path);
-    if (!lang) continue;
+    if (!wasm.detect_language(entry.path)) continue;
     const size = entry.size || 0;
     if (size > MAX_FILE_BYTES || totalBytes + size > MAX_TOTAL_BYTES || selected.length >= MAX_FILES) {skipped++; continue;}
-    selected.push({...entry, lang}); totalBytes += size;
+    selected.push(entry); totalBytes += size;
   }
   if (skipped) warnings.push(`${skipped} source files omitted by size/count limits (max ${MAX_FILES} files, ${(MAX_TOTAL_BYTES/1e6)} MB total, ${MAX_FILE_BYTES/1e6} MB/file).`);
   return {selected, skipped};
 }
 
-async function analyzeGithub(input, run, signal, respond) {
-  const [owner, repo] = parseGitHubURL(input);
+async function analyzeRepository(input, provider, legacy, run, signal, respond) {
+  let repository;
+  try {repository = parseRepository(input, provider);}
+  catch (error) {
+    if (legacy) throw Error('The web app supports public GitHub repositories. Enter a repository root URL or owner/repository.');
+    throw error;
+  }
+  if (legacy) {
+    if (repository.provider !== 'github') throw Error('The web app supports public GitHub repositories. Use local files for other sources.');
+    if (/^https:/i.test(String(input).trim()) && new URL(input).pathname.replace(/^\/+|\/+$/g, '').split('/').length !== 2) {
+      throw Error('Enter a repository root URL: https://github.com/OWNER/REPO');
+    }
+  }
   const wasm = await engine();
   if (run !== activeRun) return;
   const warnings = [];
-  respond('progress', {label: 'Reading repository information…', done: 0, total: 0});
-  const base = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
-  const repoInfo = await apiJson(base, signal);
-  const ref = repoInfo.default_branch;
-  const commit = await apiJson(`${base}/commits/${encodeURIComponent(ref)}`, signal);
-  const revision = commit.sha;
-  const tree = await apiJson(`${base}/git/trees/${encodeURIComponent(commit.commit.tree.sha)}?recursive=1`, signal);
-  if (tree.truncated) warnings.push('GitHub truncated the recursive tree; results are incomplete.');
-  const {selected, skipped} = chooseEntries(tree.tree || [], warnings, wasm);
+  const progress = label => respond('progress', {label, done: 0, total: 0});
+  progress('Reading repository information…');
+  const {entries, rawURL, detail} = await repositoryTree(repository, signal, warnings, progress);
+  if (run !== activeRun || signal.aborted) return;
+  const {selected, skipped} = chooseEntries(entries, warnings, wasm);
   if (!selected.length) throw Error('No supported text/source files found.');
   const results = new Array(selected.length);
   const failures = [];
   let done = 0, next = 0, actualBytes = 0;
   respond('progress', {label: 'Downloading and analyzing source files…', done, total: selected.length});
-  const rawBase = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(revision)}`;
   const thread = async () => {
     while (next < selected.length) {
       if (run !== activeRun || signal.aborted) return;
       const index = next++;
       const entry = selected[index];
       try {
-        const path = entry.path.split('/').map(encodeURIComponent).join('/');
-        const response = await fetch(`${rawBase}/${path}`, {signal});
-        if (!response.ok) throw Error(`HTTP ${response.status}`);
-        const data = await readSource(response);
+        let data = entry.bytes;
+        if (!data) {
+          const response = await fetch(rawURL(entry), {signal, credentials: 'omit'});
+          if (!response.ok) throw Error(`HTTP ${response.status}`);
+          data = response.body ? await readBounded(response.body, MAX_FILE_BYTES, 'Source file', signal) : new Uint8Array();
+        }
         if (looksBinary(data)) throw Error('binary file');
         if (actualBytes + data.length > MAX_TOTAL_BYTES) throw Error('total size limit');
         actualBytes += data.length;
@@ -141,33 +121,9 @@ async function analyzeGithub(input, run, signal, respond) {
   if (run !== activeRun || signal.aborted) return;
   const omitted = selected.length - results.filter(Boolean).length;
   if (omitted) warnings.push(`Unable to analyze ${omitted} files. Examples: ${failures.join(' · ')}`);
-  const output = assemble(results.filter(Boolean), `${owner}/${repo}`, {owner, repo, ref, revision}, warnings, skipped + omitted);
-  if (!output.results.Total.files) throw Error('File fetching failed. Check your network connection, CORS restrictions, or GitHub limits.');
+  const output = assemble(results.filter(Boolean), repository.project, detail, warnings, skipped + omitted);
+  if (!output.results.Total.files) throw Error('File fetching failed. Check your network connection, repository access, or host rate limits.');
   respond('result', {data: output});
-}
-
-// Enforce the limit while downloading, even when Content-Length/tree size is missing.
-async function readSource(response) {
-  const reader = response.body?.getReader();
-  if (!reader) return new Uint8Array();
-  const chunks = [];
-  let size = 0;
-  try {
-    for (;;) {
-      const {done, value} = await reader.read();
-      if (done) break;
-      size += value.length;
-      if (size > MAX_FILE_BYTES) {
-        await reader.cancel();
-        throw Error('file exceeds 1.5 MB limit');
-      }
-      chunks.push(value);
-    }
-  } finally { reader.releaseLock(); }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
-  return bytes;
 }
 
 async function analyzeLocal(files, run, respond) {
@@ -219,14 +175,14 @@ async function analyzeLocal(files, run, respond) {
 self.addEventListener('message', async (ev) => {
   const {type} = ev.data;
   if (type === 'cancel') { activeRun++; controller?.abort(); return; }
-  if (type !== 'github' && type !== 'local') return;
+  if (!['github', 'repository', 'local'].includes(type)) return;
   const run = ++activeRun;
   controller?.abort(); controller = new AbortController();
   const respond = (kind, detail = {}) => {
     if (run === activeRun) self.postMessage({type: kind, id: ev.data.id, ...detail});
   };
   try {
-    if (type === 'github') await analyzeGithub(ev.data.url, run, controller.signal, respond);
+    if (type === 'github' || type === 'repository') await analyzeRepository(ev.data.url, ev.data.provider, type === 'github', run, controller.signal, respond);
     else if (type === 'local') await analyzeLocal(ev.data.files || [], run, respond);
   } catch (err) {
     if (run === activeRun) respond('error', {message: messageOf(err)});

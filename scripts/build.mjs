@@ -6,7 +6,7 @@ import {createManifest, root, targets as extensionTargets, version} from './lib/
 
 const allTargets = ['web', ...extensionTargets];
 const appFiles = [
-  'index.html', 'app.js', 'worker.js', 'languages.js', 'language-colors.js', 'style.css',
+  'index.html', 'app.js', 'worker.js', 'repositories.js', 'hosts.js', 'archive.js', 'exclude.js', 'language-colors.js', 'style.css',
   'favicon-16x16.png', 'favicon-32x32.png',
   'third-party/tokei-MIT.txt', 'third-party/tokei-Apache-2.0.txt',
   'third-party/home-MIT.txt', 'third-party/home-Apache-2.0.txt',
@@ -23,7 +23,7 @@ export async function buildApplications({sourceRoot = root, outDir = join(root, 
     target,
     manifest: target === 'web' ? null : createManifest(target, sourceRoot),
     files: [...runtimeFiles, ...(target === 'web' ? [[join(sourceRoot, 'apps/web/.nojekyll'), '.nojekyll']] :
-      ['background.js', 'action.js', 'repository.js'].map(file => [join(sourceRoot, 'packages/extension', file), file]))],
+      ['extension-page.js', 'popup.css', 'results.js'].map(file => [join(sourceRoot, 'packages/extension', file), file]))],
   }));
   // Validate all inputs before replacing any previous app output.
   for (const source of new Set(builds.flatMap(build => build.files.map(([source]) => source)))) {
@@ -46,7 +46,20 @@ export async function buildApplications({sourceRoot = root, outDir = join(root, 
       await mkdir(resolve(path, '..'), {recursive: true});
       await copyFile(source, path);
     }
-    if (manifest) await writeFile(join(directory, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+    if (manifest) {
+      await writeFile(join(directory, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+    }
+    const html = (await readFile(join(directory, 'index.html'), 'utf8'))
+      .replace(/<!-- (web|extension)-only -->([\s\S]*?)<!-- \/\1-only -->/g,
+        (_, app, content) => (app === 'extension') === !!manifest ? content : '');
+    if (manifest) {
+      const extensionHTML = html.replace('src="app.js"', 'src="extension-page.js"')
+        .replace('id="github-panel" role="tabpanel" aria-labelledby="tab-github"', 'id="github-panel"');
+      await writeFile(join(directory, 'index.html'), extensionHTML.replace('<html lang="en">', '<html lang="en" data-extension-view="tab">'));
+      await writeFile(join(directory, 'popup.html'), extensionHTML
+        .replace('<html lang="en">', '<html lang="en" data-extension-view="popup">')
+        .replace('<link rel="stylesheet" href="style.css">', '<link rel="stylesheet" href="style.css">\n  <link rel="stylesheet" href="popup.css">'));
+    } else await writeFile(join(directory, 'index.html'), html);
     outputs.push(directory);
     if (packageZip && extensionTargets.includes(target)) {
       const archive = resolve(outDir, `tokei-wasm-${target}-${version}.zip`);

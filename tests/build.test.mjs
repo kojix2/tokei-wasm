@@ -9,20 +9,28 @@ test('all three distributions use identical shared runtime and engine assets', a
   const temporary = await mkdtemp(join(tmpdir(), 'tokei-apps-'));
   try {
     await buildApplications({outDir: temporary});
-    for (const file of ['index.html', 'app.js', 'worker.js', 'pkg/tokei_wasm.js', 'pkg/tokei_wasm_bg.wasm']) {
+    for (const file of ['app.js', 'worker.js', 'pkg/tokei_wasm.js', 'pkg/tokei_wasm_bg.wasm']) {
       const web = await readFile(join(temporary, 'web', file));
       assert.deepEqual(await readFile(join(temporary, 'chrome', file)), web, `Chrome ${file}`);
       assert.deepEqual(await readFile(join(temporary, 'firefox', file)), web, `Firefox ${file}`);
     }
     const web = await readdir(join(temporary, 'web'));
+    const webHTML = await readFile(join(temporary, 'web/index.html'), 'utf8');
+    assert.match(webHTML, /id="local-panel"/);
+    assert.doesNotMatch(webHTML, /id="open-details"|id="repository-provider"|<!-- (web|extension)-only -->/);
     assert.ok(web.includes('.nojekyll'));
     assert.ok(!web.includes('manifest.json'));
     assert.ok(!web.includes('background.js'));
     for (const target of ['chrome', 'firefox']) {
       const files = await readdir(join(temporary, target));
       assert.ok(files.includes('manifest.json'));
-      assert.ok(files.includes('background.js'));
+      assert.ok(files.includes('popup.html'));
+      assert.ok(!files.includes('background.js'));
       assert.ok(!files.includes('.nojekyll'));
+      const html = await readFile(join(temporary, target, 'popup.html'), 'utf8');
+      assert.match(html, /id="open-details"/);
+      assert.match(html, /id="repository-provider"/);
+      assert.doesNotMatch(html, /id="local-panel"|<!-- (web|extension)-only -->/);
     }
     await writeFile(join(temporary, 'web', 'keep.txt'), 'web output');
     await buildApplications({outDir: temporary, targets: ['chrome', 'firefox']});

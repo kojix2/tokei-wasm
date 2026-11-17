@@ -1,13 +1,15 @@
 // Source analysis runs in worker.js; this module handles input, results and exports.
-import {isExcluded} from './languages.js';
+import {isExcluded} from './exclude.js';
+import {repositoryFileURL} from './repositories.js';
 import {languageColor, loadLanguageColors} from './language-colors.js';
 const $ = (sel) => document.querySelector(sel);
 const fmt = (value) => Number(value || 0).toLocaleString('en-US');
-const sourceControls = ['analyze-button', 'folder-input', 'files-input', 'choose-folder', 'choose-files'].map(id => $(`#${id}`));
+const sourceControls = ['analyze-button', 'folder-input', 'files-input', 'choose-folder', 'choose-files'].map(id => $(`#${id}`)).filter(Boolean);
 let worker;
 let busy = false;
 let activeRequest = 0;
 let current = null;
+let repositoryHandler = repo => run({type: 'github', url: repo});
 let sortKey = 'code';
 let sortDesc = true;
 let searchQuery = '';
@@ -22,14 +24,15 @@ loadLanguageColors().then(() => {
 function setTab(name) {
   for (const choice of ['github', 'local']) {
     const selected = choice === name;
+    if (!$(`#tab-${choice}`)) continue;
     $(`#tab-${choice}`).setAttribute('aria-selected', String(selected));
     $(`#tab-${choice}`).tabIndex = selected ? 0 : -1;
     $(`#${choice}-panel`).classList.toggle('hidden', !selected);
   }
 }
-$('#tab-github').addEventListener('click', () => setTab('github'));
-$('#tab-local').addEventListener('click', () => setTab('local'));
-$('.tabs').addEventListener('keydown', ev => {
+$('#tab-github')?.addEventListener('click', () => setTab('github'));
+$('#tab-local')?.addEventListener('click', () => setTab('local'));
+$('.tabs')?.addEventListener('keydown', ev => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(ev.key)) return;
   ev.preventDefault();
   const name = ev.key === 'Home' ? 'github' : ev.key === 'End' ? 'local' :
@@ -42,7 +45,7 @@ function setBusy(value) {
   busy = value;
   $('#progress-box').classList.toggle('hidden', !value);
   for (const control of sourceControls) control.disabled = value;
-  $('#drop-zone').setAttribute('aria-busy', String(value));
+  $('#drop-zone')?.setAttribute('aria-busy', String(value));
 }
 function startProgress(label) {
   setBusy(true);
@@ -78,7 +81,7 @@ function run(message) {
 $('#github-form').addEventListener('submit', (ev) => {
   ev.preventDefault();
   if ($('#analyze-button').disabled) return;
-  run({type: 'github', url: $('#repo-url').value});
+  repositoryHandler($('#repo-url').value);
 });
 function runFiles(files) {
   if (files?.length && !busy) {
@@ -88,8 +91,8 @@ function runFiles(files) {
   }
 }
 for (const kind of ['folder', 'files']) {
-  $(`#choose-${kind}`).addEventListener('click', () => $(`#${kind}-input`).click());
-  $(`#${kind}-input`).addEventListener('change', ev => {runFiles(ev.target.files); ev.target.value = '';});
+  $(`#choose-${kind}`)?.addEventListener('click', () => $(`#${kind}-input`).click());
+  $(`#${kind}-input`)?.addEventListener('change', ev => {runFiles(ev.target.files); ev.target.value = '';});
 }
 $('#cancel').addEventListener('click', () => {
   activeRequest++; worker?.terminate(); worker = null;
@@ -105,10 +108,8 @@ function onWorkerMessage({data}) {
   } else if (data.type === 'error') {
     showError(data.message);
   } else if (data.type === 'result') {
-    setBusy(false); current = data.data; expanded.clear();
-    sortKey = 'code'; sortDesc = true; searchQuery = '';
-    $('#language-search').value = '';
-    showResults();
+    restoreResult(data.data);
+    document.dispatchEvent(new CustomEvent('analysis-result', {detail: current}));
   }
 }
 
@@ -132,11 +133,11 @@ async function readDroppedEntry(entry, records, request) {
   }
 }
 const dropZone = $('#drop-zone');
-for (const event of ['dragenter', 'dragover']) dropZone.addEventListener(event, ev => {
+for (const event of ['dragenter', 'dragover']) dropZone?.addEventListener(event, ev => {
   ev.preventDefault(); if (!busy) dropZone.classList.add('drag-over');
 });
-dropZone.addEventListener('dragleave', ev => {if (!dropZone.contains(ev.relatedTarget)) dropZone.classList.remove('drag-over');});
-dropZone.addEventListener('drop', async ev => {
+dropZone?.addEventListener('dragleave', ev => {if (!dropZone.contains(ev.relatedTarget)) dropZone.classList.remove('drag-over');});
+dropZone?.addEventListener('drop', async ev => {
   ev.preventDefault(); dropZone.classList.remove('drag-over');
   if (busy) return;
   const entries = Array.from(ev.dataTransfer.items || [], item => item.webkitGetAsEntry?.()).filter(Boolean);
@@ -177,7 +178,9 @@ function showResults() {
   else note.classList.add('hidden');
   $('#results').classList.remove('hidden');
   renderTable(); renderCharts();
-  $('#results').scrollIntoView({behavior: 'smooth', block: 'start'});
+  if (document.documentElement.dataset.extensionView !== 'popup') {
+    $('#results').scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
 }
 
 function createCell(value, parent, tag='td') {
@@ -195,11 +198,8 @@ function renderDetails(container, reports) {
     const row = tbody.insertRow();
     const cell = row.insertCell();
     if (current.detail) {
-      const {owner, repo, ref} = current.detail;
       const link = document.createElement('a');
-      const branch = encodeURIComponent(current.detail.revision || ref);
-      const path = report.name.split('/').map(encodeURIComponent).join('/');
-      link.href = `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/blob/${branch}/${path}`;
+      link.href = repositoryFileURL(current.detail, report.name);
       link.target = '_blank'; link.rel = 'noopener noreferrer';
       link.textContent = report.name;
       cell.append(link);
@@ -348,5 +348,23 @@ $('#download-csv').addEventListener('click',()=>{
 });
 
 // Bookmarkable links work on project pages: https://owner.github.io/project/?repo=owner/repository
+export function analyzeRepository(repo) {
+  $('#repo-url').value = repo;
+  return repositoryHandler(repo);
+}
+
+export function setRepositoryHandler(handler) {repositoryHandler = handler;}
+export function runRepository(repo, provider) {run({type: 'repository', url: repo, provider});}
+export {showError};
+
+export function restoreResult(data) {
+  setBusy(false); current = data; expanded.clear();
+  sortKey = 'code'; sortDesc = true; searchQuery = '';
+  $('#language-search').value = '';
+  setTab(data.detail ? 'github' : 'local');
+  if (data.detail) $('#repo-url').value = data.detail.input || `${data.detail.owner}/${data.detail.repo}`;
+  showResults();
+}
+
 const initialRepo = new URLSearchParams(location.search).get('repo');
-if(initialRepo){$('#repo-url').value=initialRepo;run({type:'github',url:initialRepo});}
+if (initialRepo && !document.documentElement.dataset.extensionView) analyzeRepository(initialRepo);
