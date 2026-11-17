@@ -1,42 +1,56 @@
 # Architecture and limits
 
-The repository produces three distributions from one interface and one engine:
+All three apps share plain JavaScript, HTML, CSS, and one Rust/Wasm engine. There is no framework or bundler.
 
-```text
-apps/web/ + packages/wasm/pkg/ ──────────────────────► dist/web/
-            + packages/extension/ + apps/chrome/ ────► dist/chrome/
-            + packages/extension/ + apps/firefox/ ───► dist/firefox/
-```
+## Source layout
 
-`scripts/build.mjs` copies an explicit list of runtime assets into each target and preserves their relative URLs. The web distribution includes the Pages marker; extension distributions add their own manifest and shared popup scripts/styles. The assembler derives both extension HTML entry points from the shared web HTML: `popup.html` adds compact styling, while `index.html` keeps the full interface. Small `web-only` and `extension-only` blocks in the shared HTML select the controls for each distribution; the assembler does not construct form markup in JavaScript. Both load `extension-page.js`, which imports the shared app module. Generated output is kept out of the source and documentation directories.
+| Path | Responsibility |
+| --- | --- |
+| `apps/web/` | Shared interface, worker, charts, and static assets |
+| `apps/web/repositories.js` | Repository input, toolbar URL recognition, source links |
+| `apps/web/hosts.js` | Host APIs, pagination, archives, and asset exclusion |
+| `apps/web/archive.js` | Bounded stream reads and Git/gzip/tar parsing |
+| `apps/web/exclude.js` | Directory exclusions |
+| `apps/chrome/`, `apps/firefox/` | Browser manifests |
+| `packages/extension/` | Popup/tab startup, host permissions, result storage, popup styles |
+| `packages/wasm/` | Rust adapter, vendored compatibility patch, compiled `pkg/` |
+| `scripts/` | Assembly, packaging, Wasm build, local server |
+| `tests/` | Node and browser tests |
+| `dist/` | Generated apps and ZIPs; ignored by Git |
 
-Both browser manifests set `action.default_popup` to `popup.html`; no background context is needed. The popup queries the active tab with `activeTab`, normalizes recognized hosting pages to a repository identity (including the origin for non-GitHub hosts), and calls the shared analysis UI. Each popup/tab owns its worker, Wasm instance, progress, cancellation, and result data. Closing a popup stops unfinished work.
+`scripts/build.mjs` copies shared assets and Wasm into each distribution. It selects `web-only` / `extension-only` HTML blocks and derives extension `popup.html` and `index.html` from the shared HTML. Extension views load `extension-page.js`; the popup also loads `popup.css`. Each distribution includes licenses and preserves relative runtime URLs.
 
-`packages/extension/results.js` stores only the latest completed result in extension-origin local storage, without source contents or extra permissions. Reopening on the same repository within five minutes restores it; a different repository or expired result triggers fresh analysis. `Open details` saves the displayed result again and passes its ID to the full tab, so the tab can restore the same completed result without fetching it again. If analysis is unfinished, a repository URL instead starts it in the new tab. Missing/replaced caches fall back to repository analysis or the input screen. The standalone web app retains its `?repo=` entry point and does not use extension storage.
+## Analysis flow
 
+A Web Worker reads bytes from host APIs, Git archives, or local files, applies selection limits, and calls Rust through wasm-bindgen. JavaScript aggregates and displays the results and exports JSON/CSV. It does not implement a lexer.
 
-`apps/web/repositories.js` owns repository input parsing, toolbar URL recognition, and commit links. `hosts.js` owns all hosting-specific enumeration and HTTP/JSON handling: REST trees, directory pagination, Hugging Face asset exclusion, SourceForge’s Allura code table, and sourcehut archives. `archive.js` owns bounded stream reads and Git/gzip/tar parsing. `exclude.js` holds the directory exclusion list. The worker applies one shared selection, download, cancellation, and Wasm analysis pipeline. The web app keeps GitHub and local files; extensions use the multi-host entry point.
+`packages/wasm/src/lib.rs` uses tokei 15.0.0 with default features disabled and calls upstream `LanguageType::parse_from_slice`. Each popup or tab owns its worker, Wasm instance, progress, cancellation, and results.
 
-`packages/extension/extension-page.js` handles popup/tab startup, per-server permission requests, and opening details; `results.js` stores the latest result. Their UI markup lives in the shared HTML, general styling in `style.css`, and popup sizing in `popup.css`. These remain plain JavaScript, HTML, and CSS without a framework or bundler.
+The web app accepts GitHub and local inputs; extensions enable the other hosts. Hosted enumeration, downloads, and source links use the same revision. GitHub/Gitee use trees and pinned raw files; GitLab uses paginated trees and immutable blobs; Forgejo/Gitea, Bitbucket, and Hugging Face use paginated APIs. sourcehut uses Git refs and archives; SourceForge uses Git refs and Allura code pages.
 
-Self-hosted GitLab/Forgejo/Gitea origins require a user-triggered optional permission request. The chosen origin/type is remembered locally. Required permissions remain limited to known service origins. Requests omit credentials; private/authenticated repositories are outside this edition.
+`packages/extension/results.js` keeps the latest completed result in extension-origin local storage. Open details passes its result ID to the new tab; missing or replaced results fall back to repository analysis or the input screen. The web app uses `?repo=` links and does not use extension storage. See [extension behavior](extensions.md#use) for cache lifetime and popup handling.
 
-At runtime, all three applications use the same analysis flow:
+Language colors load once per page from [ozh/github-colors](https://github.com/ozh/github-colors). `language-colors.js` maps differing tokei names. Missing colors and failed or timed-out requests use gray without blocking analysis.
 
-```text
-Hosting APIs / Git archives ──┐
-                             ├─ Web Worker ─ wasm-bindgen ─ Rust tokei
-Local files (web only) ───────┘                                 │
-                                                               ▼
-                                                UI / JSON / CSV
-```
+## Analysis limits
 
-- Rust wrapper: `packages/wasm/src/lib.rs`, using `tokei = "=15.0.0"` with `default-features = false` and upstream `LanguageType::parse_from_slice`.
-- JavaScript collects bytes, applies browser limits, aggregates results, and renders the UI; it does not implement a replacement lexer.
-- Language colors load once per page from [ozh/github-colors](https://github.com/ozh/github-colors), an automatically updated JSON version of GitHub Linguist's colors. There is no bundled palette or manual color update step. `apps/web/language-colors.js` maps differing tokei names; missing colors or a failed/timed-out request use gray without blocking analysis.
-- Browser limits: **1,200 source files**, **1.5 MB per file**, **25 MB total**. Remote file responses also have a streamed per-file download limit. Sourcehut archives have additional compressed/expanded bounds described in the extension guide. Oversized, binary, unreadable, or failed downloads count as omitted; excluded directories and unknown extensions are ignored before selection.
-- Dependency/build directories and most hidden directories are excluded by name; `.github` is allowed. This edition does **not** apply `.gitignore`, `.ignore`, or `.tokeignore` syntax.
-- Language detection uses file extensions and common special filenames; it does not inspect extensionless shebangs. Repository totals can differ from the native CLI's filesystem traversal.
-- Embedded counts are included in the host file's summarized statistics and retained in its JSON `embedded` field. A `.html` file containing JavaScript remains listed under HTML.
-- Hosted analysis supports public repositories only. API rate limits, CORS/network errors, and truncated repository trees are reported. Empty repositories and selections without readable source files return errors.
-- Dynamic API endpoints and database caches from the original project are outside this static edition.
+MB values below use decimal bytes.
+
+| Resource | Limit |
+| --- | --- |
+| Selected source files | 1,200 |
+| Source file size / streamed download | 1.5 MB |
+| Total source contents | 25 MB |
+| Tree enumeration | 100,000 entries |
+| sourcehut Git refs / compressed archive / expanded archive | 1 MB / 32 MB / 100 MB |
+| SourceForge Git refs / code-tree page | 1 MB / 4 MB per directory |
+
+Oversized, binary, unreadable, and failed files count as omitted. Truncated trees and enumeration limits produce warnings about incomplete results. Successful files remain in the results. Empty repositories and selections without readable source files return errors.
+
+Dependency/build directories and most hidden directories are excluded by name; `.github` is allowed. Unknown extensions are ignored before selection. Symlinks and non-regular archive members are excluded where the host exposes their type.
+
+This app does not apply `.gitignore`, `.ignore`, or `.tokeignore` rules. Language detection uses extensions and special filenames, without inspecting extensionless shebangs. Counts can therefore differ from the native CLI's filesystem traversal.
+
+Embedded language counts are included in the host file's totals and retained in JSON's `embedded` field. HTML containing JavaScript remains listed under HTML.
+
+Hosted analysis requires public repositories. API rate limits, CORS/network failures, and host blocking are reported. See [host-specific restrictions](extensions.md#supported-hosts).

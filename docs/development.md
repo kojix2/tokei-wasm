@@ -1,28 +1,28 @@
 # Development
 
-Run all commands from the repository root. Node 22+ can assemble all three apps from the checked-in Wasm without installing npm packages or Rust. Browser tests require the npm development dependencies.
+Run commands from the repository root. Node 22+ can assemble the apps using the checked-in Wasm. Rust is needed only to rebuild the engine; npm dependencies are needed for browser tests.
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
 | `npm start` | Build and serve the web app at http://127.0.0.1:8000 |
-| `npm run build` | Assemble web, Chrome, and Firefox distributions |
-| `npm run build:web` | Assemble only `dist/web/` |
+| `npm run build` | Assemble all apps |
+| `npm run build:web` | Assemble `dist/web/` |
 | `npm run build:extensions` | Assemble `dist/chrome/` and `dist/firefox/` |
-| `npm run package:extensions` | Assemble extensions and create versioned ZIPs |
-| `npm run build:wasm` | Compile Rust/Wasm, run native tests, assemble apps, and run Node tests |
-| `npm test` | Assemble all apps and run Node/Wasm/worker/package tests |
-| `npm run test:browser` | Build and test the web app on desktop/mobile Chromium |
-| `npm run test:extensions` | Build and test the Chrome extension in Chromium |
+| `npm run package:extensions` | Assemble extensions and create versioned ZIPs in `dist/` |
+| `npm run build:wasm` | Rebuild Wasm, run Rust tests, assemble apps, and run Node tests |
+| `npm test` | Assemble apps and run Node/Wasm/worker/package tests |
+| `npm run test:browser` | Build and test the web app in desktop/mobile Chromium |
+| `npm run test:extensions` | Build and test the installed Chrome extension in Chromium |
 
-The generic `npm run build` assembles distributions; rebuilding Rust explicitly uses `build:wasm`. `scripts/build.mjs` is the shared assembly and ZIP entry point. Output folders are replaced on each build for the selected targets; other targets are preserved.
+Builds replace the selected output folders. Packaging requires `zip`; package tests also require `unzip`.
 
-Set another server port with `npm start -- --port 8080`. For a different HTTP server, first run `npm run build:web`, then `python3 -m http.server 8000 -d dist/web`. Module workers require HTTP rather than opening the HTML file directly.
+Set the server port with `npm start -- --port 8080`. To use another server, run `npm run build:web`, then `python3 -m http.server 8000 -d dist/web`. Module workers require HTTP.
 
-## Rebuild the shared engine
+## Rebuild Wasm
 
-Prerequisites: stable Rust/Cargo, the `wasm32-unknown-unknown` target, wasm-pack 0.13.1, and Node 22+.
+Requires stable Rust/Cargo, Node 22+, and wasm-pack 0.13.1:
 
 ```sh
 rustup target add wasm32-unknown-unknown
@@ -30,20 +30,20 @@ cargo install wasm-pack --version 0.13.1 --locked
 npm run build:wasm
 ```
 
-`scripts/build-wasm.sh` builds with `packages/wasm/Cargo.lock`, regenerates `packages/wasm/pkg/`, and runs the native Rust and JavaScript/Wasm tests. Generated engine files should be kept with the distribution. Do not edit them manually. The build disables the optional wasm-opt download; the engine is compiled with Rust's release size optimization and LTO.
+The build uses `packages/wasm/Cargo.lock`, regenerates `packages/wasm/pkg/`, and runs Rust and Node tests. It uses release size optimization and LTO, with the optional wasm-opt download disabled.
 
-Upstream tokei's `etcetera` dependency pulls in `home` 0.5.12, which does not compile for `wasm32-unknown-unknown`. `packages/wasm/vendor/home/` contains the upstream crate with one compatibility change: `home_dir_inner()` returns `None` on non-Unix/non-Windows targets. Native behavior and **the upstream tokei parser remain unchanged**. The vendored crate includes its original MIT and Apache licenses.
+`packages/wasm/vendor/home/` patches home 0.5.12, pulled in by tokei's etcetera dependency, to compile for Wasm: `home_dir_inner()` returns `None` on non-Unix/non-Windows targets. Native behavior and the tokei parser are unchanged. The crate retains its MIT and Apache licenses.
 
-## Verify
+## Test
 
 ```sh
 cargo test --manifest-path packages/wasm/Cargo.toml --lib --locked
 npm test
 ```
 
-The JavaScript tests load the actual generated Wasm. They fail if the artifacts are missing, so missing builds cannot silently pass verification. Worker integration tests simulate GitHub responses and file-read failures while using the real Rust parser.
+Node tests use the real Wasm, including worker integration with simulated host responses. Missing engine artifacts fail the tests.
 
-To run the browser tests:
+For browser tests:
 
 ```sh
 npm ci
@@ -52,18 +52,16 @@ npm run test:browser
 npm run test:extensions
 ```
 
-Tests cover local folders/files, dropped files, summaries/charts, search/sorting, downloads, GitHub deep links/revision links, cancellation, errors, and retrying. Both desktop and mobile viewports run in Chromium. To use an existing Chrome installation, set `CHROME_PATH=/path/to/chrome`.
+Tests cover local input, hosted analysis, charts, filtering, exports, cancellation, errors, and extension behavior. Network fixtures avoid live-host dependencies. Set `CHROME_PATH` to use an existing compatible Chromium installation, or `PLAYWRIGHT_PORT` to change the web test server's default port of 8765. Firefox requires a [manual smoke check](extensions.md#verification).
 
-Web browser tests use port 8765 by default. If another process is using it, set `PLAYWRIGHT_PORT` to an available port.
+## CI and GitHub Pages
 
-## GitHub Actions and Pages
+`.github/workflows/ci.yml` runs on pull requests, pushes to `main`, and manual dispatches. It rebuilds Wasm, runs Rust, Node, and Chromium tests, and uploads extension ZIPs as the `browser-extensions` artifact.
 
-`.github/workflows/ci.yml` runs on pull requests, pushes to `main`, and manual dispatches. It rebuilds the engine, runs Rust and Node tests, tests the web app and installed Chromium extension, and packages both browser extensions. The `browser-extensions` workflow artifact contains the ZIPs.
+Successful `main` builds deploy `dist/web/` to GitHub Pages. In repository Settings → Pages → Build and deployment → Source, select GitHub Actions. The project site uses `https://YOURNAME.github.io/YOUR_REPO/`; runtime URLs support this subdirectory. Pull requests do not deploy.
 
-On `main`, the successful build uploads `dist/web/` as a Pages artifact. A separate deployment job depends on that build and receives Pages write permissions; pull requests run verification without deploying. In repository **Settings → Pages → Build and deployment → Source**, select **GitHub Actions**. The site is published at `https://YOURNAME.github.io/YOUR_REPO/`. Relative runtime URLs support project subdirectories.
+## Generated files and versions
 
-## Versions and generated files
+Commit rebuilt `packages/wasm/pkg/` so a fresh checkout remains runnable. Do not edit generated engine files by hand or commit `dist/`, build caches, or test reports.
 
-Keep the extension version in the root `package.json` and both `apps/*/manifest.json` files in sync. The assembler rejects mismatches, and ZIP names use that version. The Rust crate and generated engine metadata describe the engine package separately.
-
-Commit changes to source and, when rebuilding Rust, `packages/wasm/pkg/` so a fresh checkout remains runnable. Do not edit generated engine files by hand. Keep `dist/`, build caches, and test reports out of Git.
+Keep the version in `package.json` and both extension manifests in sync. The assembler rejects mismatches and uses that version in ZIP names. Rust crate and engine metadata have separate versioning.
