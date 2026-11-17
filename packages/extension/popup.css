@@ -1,10 +1,10 @@
 /* The same accessible interface and engine, sized for a toolbar panel. */
-/* A popup is sized from its contents. Viewport-relative width constraints can
-   collapse the initial measurement before the browser has sized the panel. */
+/* Fix both widths: Firefox measures the body's preferred width, while Chromium
+   needs a nonzero root width before the popup viewport has been sized. */
 html { width: 480px; min-width: 480px; max-height: 600px; overflow: hidden; }
 /* Let classic scrollbars reduce the available width. Keep extra padding for
    overlay scrollbars, which do not reserve a gutter even with stable set. */
-body { width: 100%; max-height: 600px; margin: 0; padding: 0 28px 0 20px; overflow-y: auto; scrollbar-gutter: stable; font-size: 14px; }
+body { width: 480px; max-height: 600px; margin: 0; padding: 0 28px 0 20px; overflow-y: auto; scrollbar-gutter: stable; font-size: 14px; }
 .site-header { padding: 16px 0 14px; }
 .site-header > a { display: none; }
 .site-header h1 { font-size: 22px; }

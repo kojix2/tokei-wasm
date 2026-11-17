@@ -284,6 +284,15 @@ for (const scrollbars of ['system', 'classic']) {
       await page.goto(`${origin}/popup.html`);
       await expect(page.locator('#progress-box')).toBeVisible();
       expect(await page.locator('html').evaluate(element => element.getBoundingClientRect().width)).toBe(480);
+      // Firefox sizes native popups from the body's preferred width. Measure
+      // with an intrinsic root width so a percentage body cannot hide overflow.
+      const preferredWidth = await page.evaluate(() => {
+        const root = document.documentElement;
+        root.style.width = 'max-content';
+        try {return document.body.getBoundingClientRect().width;}
+        finally {root.style.removeProperty('width');}
+      });
+      expect(preferredWidth).toBe(480);
       await page.setViewportSize({width: 480, height: 600});
       if (scrollbars === 'classic') {
         await page.addStyleTag({content: 'body::-webkit-scrollbar { width: 16px; }'});
