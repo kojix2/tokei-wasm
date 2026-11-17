@@ -6,7 +6,10 @@
     "start": "node scripts/serve.mjs",
     "build": "bash build-wasm.sh",
     "test": "node --test tests/*.test.mjs",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "build:extensions": "node scripts/build-extensions.mjs",
+    "package:extensions": "node scripts/build-extensions.mjs --zip",
+    "test:extensions": "npm run build:extensions && playwright test --config playwright.extensions.config.js"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1"

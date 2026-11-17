@@ -46,6 +46,8 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Desktop and mobile browser tests
         run: npm run test:browser
+      - name: Packaged extension browser tests
+        run: npm run test:extensions
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

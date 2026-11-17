@@ -3,3 +3,5 @@
 /test-results/
 /playwright-report/
 /docs/pkg/.gitignore
+/test-results-extensions/
+/dist/
