@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import {existsSync, readFileSync} from 'node:fs';
 import {test} from 'node:test';
-const jsUrl = new URL('../docs/pkg/tokei_wasm.js', import.meta.url);
-const wasmUrl = new URL('../docs/pkg/tokei_wasm_bg.wasm', import.meta.url);
+const jsUrl = new URL('../packages/wasm/pkg/tokei_wasm.js', import.meta.url);
+const wasmUrl = new URL('../packages/wasm/pkg/tokei_wasm_bg.wasm', import.meta.url);
 const built = existsSync(jsUrl) && existsSync(wasmUrl);
-assert.ok(built, 'Rust Wasm artifacts are required. Run npm run build first.');
+assert.ok(built, 'Rust Wasm artifacts are required. Run npm run build:wasm first.');
 
 // No fake Wasm module and no JS/C lexer: these tests run on the compiled Rust tokei.
 test('real upstream Rust tokei Wasm counts Rust lines and nested comments', async () => {

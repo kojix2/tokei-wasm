@@ -5,10 +5,12 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
-import {repositoryFromURL} from '../extension/repository.js';
-import {registerAction} from '../extension/action.js';
-import {createManifest, targets, version} from '../extension/manifest.mjs';
-import {buildExtensions} from '../scripts/build-extensions.mjs';
+import {repositoryFromURL} from '../packages/extension/repository.js';
+import {registerAction} from '../packages/extension/action.js';
+import {createManifest, targets, version} from '../scripts/lib/manifests.mjs';
+import {buildApplications} from '../scripts/build.mjs';
+
+const buildExtensions = options => buildApplications({...options, targets});
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 test('toolbar recognizes repository pages and discards branch, query and fragment', () => {
@@ -102,15 +104,15 @@ test('packages contain runnable browser-specific manifests, real Wasm and licens
 test('missing or invalid Wasm fails before replacing previous extension output', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'tokei-extension-inputs-'));
   try {
-    for (const path of ['docs', 'extension', 'LICENSE']) {
+    for (const path of ['apps', 'packages/extension', 'packages/wasm/pkg', 'LICENSE']) {
       await mkdir(join(temporary, path, '..'), {recursive: true});
       await cp(join(root, path), join(temporary, path), {recursive: true});
     }
-    const wasm = join(temporary, 'docs/pkg/tokei_wasm_bg.wasm');
+    const wasm = join(temporary, 'packages/wasm/pkg/tokei_wasm_bg.wasm');
     const outDir = join(temporary, 'dist');
     await buildExtensions({sourceRoot: temporary, outDir});
     await rm(wasm);
-    await assert.rejects(buildExtensions({sourceRoot: temporary, outDir}), /Missing or empty build input:.*tokei_wasm_bg\.wasm.*npm run build/);
+    await assert.rejects(buildExtensions({sourceRoot: temporary, outDir}), /Missing or empty build input:.*tokei_wasm_bg\.wasm.*npm run build:wasm/);
     assert.equal(JSON.parse(await readFile(join(outDir, 'chrome/manifest.json'))).version, version);
     await writeFile(wasm, 'invalid Wasm');
     await assert.rejects(buildExtensions({sourceRoot: temporary, outDir}), /WebAssembly is invalid/);

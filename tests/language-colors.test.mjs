@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {languageColor, loadLanguageColors} from '../docs/language-colors.js';
+import {languageColor, loadLanguageColors} from '../apps/web/language-colors.js';
 
 test('color loading tolerates offline, HTTP, and invalid JSON failures', async t => {
   for (const result of [new Error('offline'), new Response('', {status: 503}), new Response('invalid JSON')]) {

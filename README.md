@@ -1,10 +1,16 @@
 # tokei / wasm
 
-Analyze a public GitHub repository or a local source folder in your browser using the **original Rust `tokei` 15.0.0 parser**, compiled to WebAssembly. No application server, sign-in, or database is needed.
+Count code, comments, and blank lines in public GitHub repositories or local source files with the original **Rust tokei 15.0.0 parser**, compiled to WebAssembly. This repository contains a web app, a Chrome extension, and a Firefox extension. They share the same interface and analysis engine. No application server, account, or database is needed.
 
-The built JavaScript and WebAssembly engine are included in `docs/pkg/`. This checkout can run immediately; Rust is only needed when rebuilding the engine.
+## Applications
 
-## Run locally
+| Application | Source | Distribution |
+| --- | --- | --- |
+| Web app / GitHub Pages | [`apps/web/`](apps/web/) | `dist/web/` |
+| Chrome extension | [`apps/chrome/`](apps/chrome/) | `dist/chrome/` |
+| Firefox extension | [`apps/firefox/`](apps/firefox/) | `dist/firefox/` |
+
+## Quick start
 
 With Node 22 or later:
 
@@ -12,15 +18,16 @@ With Node 22 or later:
 npm start
 ```
 
-Open **http://127.0.0.1:8000**. No `npm install` is needed to run the app. To use a different port, run `npm start -- --port 8080`.
+Open **http://127.0.0.1:8000**. The command builds and serves the web app. No `npm install` or Rust installation is required: the shared compiled engine is checked in under `packages/wasm/pkg/`.
 
-Alternatively, serve the same static files with Python:
+To build all three applications or create extension ZIPs:
 
 ```sh
-python3 -m http.server 8000 -d docs
+npm run build
+npm run package:extensions
 ```
 
-Use an HTTP server; opening `index.html` via `file://` cannot load browser module workers.
+Load `dist/chrome/` through Chrome's **Load unpacked**, or select `dist/firefox/manifest.json` through Firefox's **Load Temporary Add-on**. The toolbar button starts analysis of the current GitHub repository's entire default branch in a new tab. See the [extension guide](docs/extensions.md) for installation, permissions, and signing limitations.
 
 ## Features
 
@@ -34,123 +41,41 @@ Use an HTTP server; opening `index.html` via `file://` cannot load browser modul
 
 GitHub analysis pins downloads and source links to the same commit, so a moving branch does not mix revisions. Local analysis and charts run entirely in the browser. The page fetches public language color metadata once; source contents are never sent with that request.
 
-## Firefox and Chrome extensions
+## Repository layout
 
-The extensions bundle the same application and Rust/Wasm engine. Click **Analyze with tokei** in the browser toolbar while viewing a public GitHub repository to open its analysis in a new tab. Repository file, branch, issue, and pull request pages are recognized; analysis always covers the **entire default branch**, regardless of the branch or file being viewed. On other pages, the button opens the input screen. Each click opens a new tab so an existing analysis can keep running.
-
-Local files/folders, charts, filtering, cancellation, and JSON/CSV downloads work in the extension too. The interface remains in English. Local analysis works offline; language colors use gray if the optional palette request fails. No source files are uploaded, and private repositories and authentication tokens are not supported.
-
-### Build and package
-
-With Node 22+, run:
-
-```sh
-npm run build:extensions
+```text
+apps/
+  web/              Shared web interface, worker, and static assets
+  chrome/           Chrome Manifest V3 configuration
+  firefox/          Firefox Manifest V3 configuration
+packages/
+  extension/        Shared toolbar action and GitHub URL recognition
+  wasm/             Rust crate, vendored compatibility patch, and compiled pkg/
+scripts/            Shared assembly, packaging, engine build, and local server
+tests/              Node tests and web/extension browser tests
+docs/               Development, architecture, and installation guides
+dist/               Generated web, Chrome, Firefox, and ZIP distributions
 ```
 
-This creates **`dist/chrome/`** and **`dist/firefox/`**, each containing a ready-to-load `manifest.json`, application assets, Wasm, and licenses. The checked-in Wasm is reused; Rust and `npm install` are not needed. If the engine artifacts are missing or need updating, run `npm run build` first with the Rust prerequisites below.
+Web assets have one source in `apps/web/` and are copied into all three distributions. Browser manifests live with their applications; only the two extensions include `packages/extension/`. All apps load the same compiled engine. `dist/` is generated and ignored by Git; `docs/` contains documentation.
 
-To also create **`dist/tokei-wasm-chrome-0.1.0.zip`** and **`dist/tokei-wasm-firefox-0.1.0.zip`**:
-
-```sh
-npm run package:extensions
-```
-
-Packaging requires the `zip` command (included on macOS and commonly available on Linux). Generated folders and archives are ignored by Git. A rebuild replaces the generated browser folders, so edit the shared application in `docs/` and extension code in `extension/`, rather than files in `dist/`.
-
-### Install in Chrome
-
-1. Open **`chrome://extensions`** and enable **Developer mode**.
-2. Click **Load unpacked**, then select **`dist/chrome/`**. If using the ZIP, extract it first and select the extracted folder containing `manifest.json`.
-3. Pin **tokei / wasm** using the toolbar's Extensions menu, visit a public GitHub repository, and click the icon.
-
-### Install in Firefox
-
-Firefox 140+ is supported.
-
-1. Open **`about:debugging#/runtime/this-firefox`**.
-2. Click **Load Temporary Add-on**, then select **`dist/firefox/manifest.json`**. If using the ZIP, extract it first and select its `manifest.json`.
-3. Pin **tokei / wasm** from the Extensions menu and click it on a public GitHub repository.
-
-Temporary add-ons are removed when Firefox restarts. The ZIP is unsigned; persistent installation in standard Firefox requires Mozilla signing. Store submission, publication, and signing are not part of this distribution.
-
-### Permissions and verification
-
-Both extensions use Manifest V3. `activeTab` reads the clicked tab's URL after the toolbar action; access to `api.github.com` and `raw.githubusercontent.com` supports public repository downloads and language colors. No page content is injected or changed. All executable JavaScript and Wasm are packaged locally. GitHub receives ordinary API/file requests for the selected repository; no analytics or application server is used.
-
-After installing browser test dependencies as described below:
+## Development
 
 ```sh
 npm test
-npm run test:extensions
-```
-
-The extension tests build the packages and load the Chrome version in a temporary Chromium profile, testing GitHub/default-branch analysis, offline local analysis, both exports, and the extension's CSP. Set `CHROME_PATH` to use an existing Chrome for Testing or Chromium installation that supports loading unpacked extensions. The toolbar handler is invoked inside the installed extension because browser toolbar controls are outside Playwright's page automation surface. Node tests also cover both manifests, URL recognition, actual toolbar listener registration, valid Wasm, missing-build errors, and ZIP contents. They require `zip` and `unzip`.
-
-For a Firefox smoke check, temporarily load its manifest, click the toolbar button on both a repository and a non-GitHub page, and analyze a local Rust file containing `fn main() {}`. Confirm one line of code, working JSON/CSV downloads, and no Wasm/CSP errors in the extension debugger.
-
-## Deploy to GitHub Pages
-
-1. Put these files at the root of a GitHub repository and push to `main`.
-2. In **Settings → Pages → Build and deployment → Source**, select **GitHub Actions**.
-3. The workflow in `.github/workflows/pages.yml` builds the Rust engine, runs native Rust tests, real Wasm/worker tests, and desktop/mobile Chromium tests, then uploads `docs/` and deploys it.
-4. Open `https://YOURNAME.github.io/YOUR_REPO/` after the workflow succeeds.
-
-Everything needed at runtime is in `docs/`, which can also be hosted by another static HTTP server. Relative asset URLs support project subdirectories.
-
-## Rebuild the engine
-
-Prerequisites: stable Rust/Cargo, the `wasm32-unknown-unknown` target, wasm-pack 0.13.1, and Node 22+.
-
-```sh
-rustup target add wasm32-unknown-unknown
-cargo install wasm-pack --version 0.13.1 --locked
-npm run build
-```
-
-`build-wasm.sh` builds with `wasm/Cargo.lock`, regenerates `docs/pkg/`, and runs the native Rust and JavaScript/Wasm tests. Generated engine files should be kept with the distribution. Do not edit them manually. The build disables the optional wasm-opt download; the engine is compiled with Rust's release size optimization and LTO.
-
-Upstream tokei's `etcetera` dependency pulls in `home` 0.5.12, which does not compile for `wasm32-unknown-unknown`. `wasm/vendor/home/` contains the upstream crate with one compatibility change: `home_dir_inner()` returns `None` on non-Unix/non-Windows targets. Native behavior and **the upstream tokei parser remain unchanged**. The vendored crate includes its original MIT and Apache licenses.
-
-## Verify
-
-```sh
-cargo test --manifest-path wasm/Cargo.toml --lib --locked
-npm test
-```
-
-The JavaScript tests load the actual generated Wasm. They fail if the artifacts are missing, so missing builds cannot silently pass verification. Worker integration tests simulate GitHub responses and file-read failures while using the real Rust parser.
-
-To run the browser tests:
-
-```sh
 npm ci
 npx playwright install chromium
 npm run test:browser
+npm run test:extensions
 ```
 
-Tests cover local folders/files, dropped files, summaries/charts, search/sorting, downloads, GitHub deep links/revision links, cancellation, errors, and retrying. Both desktop and mobile viewports run in Chromium. To use an existing Chrome installation, set `CHROME_PATH=/path/to/chrome`.
+Node tests include real Wasm/worker integration and extension ZIP validation; packaging checks require `zip` and `unzip`. Rust changes can be rebuilt and checked with `npm run build:wasm`. Pull requests run CI; successful `main` builds publish the web app to GitHub Pages and provide extension ZIPs as a workflow artifact.
 
-## Design and limits
+- [Development and GitHub Pages](docs/development.md)
+- [Browser extension installation and permissions](docs/extensions.md)
+- [Architecture, behavior, and limits](docs/architecture.md)
+- [Contributing](CONTRIBUTING.md)
 
-```text
-GitHub REST API / raw files ─┐
-                            ├─ Browser Web Worker ─ wasm-bindgen ─ Rust tokei
-Local File objects ─────────┘                                      │
-                                                                  ▼
-                                               UI / charts / JSON / CSV
-```
+## License
 
-- Rust wrapper: `wasm/src/lib.rs`, using `tokei = "=15.0.0"` with `default-features = false` and upstream `LanguageType::parse_from_slice`.
-- JavaScript collects bytes, applies browser limits, aggregates results, and renders the UI; it does not implement a replacement lexer.
-- Language colors load once per page from [ozh/github-colors](https://github.com/ozh/github-colors), an automatically updated JSON version of GitHub Linguist's colors. There is no bundled palette or manual color update step. `docs/language-colors.js` maps differing tokei names; missing colors or a failed/timed-out request use gray without blocking analysis.
-- Browser limits: **1,200 source files**, **1.5 MB per file**, **25 MB total**. GitHub responses also have a streamed per-file download limit. Oversized, binary, unreadable, or failed downloads count as omitted; excluded directories and unknown extensions are ignored before selection.
-- Dependency/build directories and most hidden directories are excluded by name; `.github` is allowed. This edition does **not** apply `.gitignore`, `.ignore`, or `.tokeignore` syntax.
-- Language detection uses file extensions and common special filenames; it does not inspect extensionless shebangs. Repository totals can differ from the native CLI's filesystem traversal.
-- Embedded counts are included in the host file's summarized statistics and retained in its JSON `embedded` field. A `.html` file containing JavaScript remains listed under HTML.
-- GitHub supports public repositories only. API rate limits, CORS/network errors, and truncated repository trees are reported. Empty repositories and selections without readable source files return errors.
-- Dynamic API endpoints and database caches from the original project are outside this static edition.
-
-## Licensing
-
-MIT-licensed. 
+[MIT](LICENSE). Distributed applications also include the upstream tokei and vendored home licenses.

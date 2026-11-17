@@ -1,14 +1,17 @@
 {
-  "name": "tokei-pages-wasm",
+  "name": "tokei-wasm",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node scripts/serve.mjs",
-    "build": "bash build-wasm.sh",
-    "test": "node --test tests/*.test.mjs",
+    "start": "npm run build:web && node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "build:web": "node scripts/build.mjs web",
+    "build:wasm": "bash scripts/build-wasm.sh",
+    "build:extensions": "node scripts/build.mjs chrome firefox",
+    "package:extensions": "node scripts/build.mjs chrome firefox --zip",
+    "test": "npm run build && node --test tests/*.test.mjs",
     "test:browser": "playwright test",
-    "build:extensions": "node scripts/build-extensions.mjs",
-    "package:extensions": "node scripts/build-extensions.mjs --zip",
     "test:extensions": "npm run build:extensions && playwright test --config playwright.extensions.config.js"
   },
   "devDependencies": {

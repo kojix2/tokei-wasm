@@ -1,7 +1,7 @@
-/wasm/target/
+/packages/wasm/target/
 /node_modules/
 /test-results/
-/playwright-report/
-/docs/pkg/.gitignore
 /test-results-extensions/
+/playwright-report/
+/packages/wasm/pkg/.gitignore
 /dist/

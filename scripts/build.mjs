@@ -1,12 +1,10 @@
 import {copyFile, mkdir, readFile, rm, stat, writeFile} from 'node:fs/promises';
-import {fileURLToPath, pathToFileURL} from 'node:url';
+import {pathToFileURL} from 'node:url';
 import {join, resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {createManifest, targets as extensionTargets, version} from '../extension/manifest.mjs';
+import {createManifest, root, targets as extensionTargets, version} from './lib/manifests.mjs';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
-
-const allTargets = extensionTargets;
+const allTargets = ['web', ...extensionTargets];
 const appFiles = [
   'index.html', 'app.js', 'worker.js', 'languages.js', 'language-colors.js', 'style.css',
   'favicon-16x16.png', 'favicon-32x32.png',
@@ -14,29 +12,30 @@ const appFiles = [
   'third-party/home-MIT.txt', 'third-party/home-Apache-2.0.txt',
 ];
 
-export async function buildExtensions({sourceRoot = root, outDir = join(root, 'dist'), targets = allTargets, packageZip = false} = {}) {
+export async function buildApplications({sourceRoot = root, outDir = join(root, 'dist'), targets = allTargets, packageZip = false} = {}) {
   for (const target of targets) if (!allTargets.includes(target)) throw Error(`Unknown app target: ${target}`);
   const runtimeFiles = [
-    ...appFiles.map(file => [join(sourceRoot, 'docs', file), file]),
-    ...['tokei_wasm.js', 'tokei_wasm_bg.wasm'].map(file => [join(sourceRoot, 'docs/pkg', file), `pkg/${file}`]),
+    ...appFiles.map(file => [join(sourceRoot, 'apps/web', file), file]),
+    ...['tokei_wasm.js', 'tokei_wasm_bg.wasm'].map(file => [join(sourceRoot, 'packages/wasm/pkg', file), `pkg/${file}`]),
     [join(sourceRoot, 'LICENSE'), 'LICENSE'],
   ];
   const builds = targets.map(target => ({
     target,
-    manifest: createManifest(target),
-    files: [...runtimeFiles, ...['background.js', 'action.js', 'repository.js'].map(file => [join(sourceRoot, 'extension', file), file])],
+    manifest: target === 'web' ? null : createManifest(target, sourceRoot),
+    files: [...runtimeFiles, ...(target === 'web' ? [[join(sourceRoot, 'apps/web/.nojekyll'), '.nojekyll']] :
+      ['background.js', 'action.js', 'repository.js'].map(file => [join(sourceRoot, 'packages/extension', file), file]))],
   }));
   // Validate all inputs before replacing any previous app output.
   for (const source of new Set(builds.flatMap(build => build.files.map(([source]) => source)))) {
     try {
       const info = await stat(source);
-      if (!info.isFile() || !info.size) throw Error('empty or not a file');
+      if (!info.isFile() || (!info.size && !source.endsWith('/.nojekyll'))) throw Error('empty or not a file');
     } catch (error) {
-      throw Error(`Missing or empty build input: ${source}. For missing Wasm artifacts, run npm run build first.`, {cause: error});
+      throw Error(`Missing or empty build input: ${source}. For missing Wasm artifacts, run npm run build:wasm first.`, {cause: error});
     }
   }
-  const wasm = await readFile(join(sourceRoot, 'docs/pkg/tokei_wasm_bg.wasm'));
-  if (!WebAssembly.validate(wasm)) throw Error('The bundled tokei WebAssembly is invalid. Run npm run build first.');
+  const wasm = await readFile(join(sourceRoot, 'packages/wasm/pkg/tokei_wasm_bg.wasm'));
+  if (!WebAssembly.validate(wasm)) throw Error('The bundled tokei WebAssembly is invalid. Run npm run build:wasm first.');
   const outputs = [];
   for (const {target, files, manifest} of builds) {
     const directory = join(outDir, target);
@@ -47,9 +46,9 @@ export async function buildExtensions({sourceRoot = root, outDir = join(root, 'd
       await mkdir(resolve(path, '..'), {recursive: true});
       await copyFile(source, path);
     }
-    await writeFile(join(directory, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+    if (manifest) await writeFile(join(directory, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
     outputs.push(directory);
-    if (packageZip) {
+    if (packageZip && extensionTargets.includes(target)) {
       const archive = resolve(outDir, `tokei-wasm-${target}-${version}.zip`);
       await rm(archive, {force: true});
       const zipped = spawnSync('zip', ['-q', '-X', '-r', archive, '.'], {cwd: directory, encoding: 'utf8'});
@@ -63,7 +62,7 @@ export async function buildExtensions({sourceRoot = root, outDir = join(root, 'd
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
     const targets = process.argv.slice(2).filter(arg => !arg.startsWith('--'));
-    const outputs = await buildExtensions({...(targets.length ? {targets} : {}), packageZip: process.argv.includes('--zip')});
+    const outputs = await buildApplications({...(targets.length ? {targets} : {}), packageZip: process.argv.includes('--zip')});
     for (const output of outputs) console.log(output);
   } catch (error) {
     console.error(error.message);

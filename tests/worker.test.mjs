@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {after, before, beforeEach, test} from 'node:test';
 import {readFileSync} from 'node:fs';
 
-const wasm = readFileSync(new URL('../docs/pkg/tokei_wasm_bg.wasm', import.meta.url));
+const wasm = readFileSync(new URL('../packages/wasm/pkg/tokei_wasm_bg.wasm', import.meta.url));
 const originalFetch = globalThis.fetch;
 const originalSelf = globalThis.self;
 let messages, onMessage, route;
@@ -19,7 +19,7 @@ before(async () => {
   };
   globalThis.fetch = async (url, options) => String(url).endsWith('/pkg/tokei_wasm_bg.wasm') ?
     new Response(wasm, {headers: {'content-type': 'application/wasm'}}) : route(String(url), options);
-  await import('../docs/worker.js');
+  await import('../dist/web/worker.js');
 });
 beforeEach(() => {
   messages = [];
