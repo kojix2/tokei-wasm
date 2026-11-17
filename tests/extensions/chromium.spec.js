@@ -33,7 +33,7 @@ test.afterEach(async () => {await context?.close();});
 // the production extension APIs and bundled engine.
 async function toolbarClick(url) {
   const page = await context.newPage();
-  await page.setViewportSize({width: 480, height: 600});
+  await page.setViewportSize({width: 420, height: 600});
   await page.addInitScript(url => {
     chrome.tabs.query = async () => [{url}];
   }, url);
@@ -66,11 +66,16 @@ test('popup analyzes the active repository and reuses results on reopen and in t
   await expect(page.locator('#stat-code')).toHaveText('1');
   await expect(page.locator('#stat-lines')).toHaveText('3');
   await expect(page.locator('#results-title')).toHaveText('acme/demo');
+  await expect(page.locator('#results-subtitle')).toHaveText('main');
   await expect(page.locator('#repo-url, #github-form, .server-options')).toHaveCount(0);
   await expect(page.locator('.hosting-support, footer')).toHaveCount(0);
   await expect(page.locator('.site-header h1')).toBeHidden();
-  await expect(page.locator('#refresh')).toBeEnabled();
-  expect(await page.locator('html').evaluate(element => element.getBoundingClientRect().width)).toBe(480);
+  await expect(page.getByRole('button', {name: 'Refresh', exact: true})).toBeEnabled();
+  expect(await page.locator('html').evaluate(element => element.getBoundingClientRect().width)).toBe(420);
+  const titleBox = await page.locator('#results-title').boundingBox();
+  const actionsBox = await page.locator('.popup-actions').boundingBox();
+  expect(actionsBox.y).toBeLessThan(titleBox.y + titleBox.height);
+  expect(actionsBox.x).toBeGreaterThanOrEqual(titleBox.x + titleBox.width);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(context.pages().filter(page => page.url().startsWith(origin))).toHaveLength(1);
   expect(requests).toContain('https://api.github.com/repos/acme/demo/commits/main');
@@ -80,12 +85,14 @@ test('popup analyzes the active repository and reuses results on reopen and in t
   const reopened = await toolbarClick('https://github.com/acme/demo/issues/1');
   await expect(reopened.locator('#results')).toBeVisible();
   await expect(reopened.locator('#stat-code')).toHaveText('1');
+  await expect(reopened.locator('#results-subtitle')).toHaveText('main');
   expect(requests).toHaveLength(requestCount);
   const detailEvent = context.waitForEvent('page');
-  await reopened.locator('#open-details').click();
+  await reopened.getByRole('button', {name: 'Open details', exact: true}).click();
   const detail = await detailEvent;
   await expect(detail.locator('#results')).toBeVisible();
   await expect(detail.locator('#stat-code')).toHaveText('1');
+  await expect(detail.locator('#results-subtitle')).toHaveText(/^main · .+/);
   expect(requests).toHaveLength(requestCount);
   await detail.locator('.language-row').click();
   await expect(detail.locator('.details-table a')).toHaveAttribute('href', 'https://github.com/acme/demo/blob/commit123/src/main.rs');
@@ -316,7 +323,7 @@ for (const scrollbars of ['system', 'classic']) {
     try {
       await page.goto(`${origin}/popup.html`);
       await expect(page.locator('#progress-box')).toBeVisible();
-      expect(await page.locator('html').evaluate(element => element.getBoundingClientRect().width)).toBe(480);
+      expect(await page.locator('html').evaluate(element => element.getBoundingClientRect().width)).toBe(420);
       // Firefox sizes native popups from the body's preferred width. Measure
       // with an intrinsic root width so a percentage body cannot hide overflow.
       const preferredWidth = await page.evaluate(() => {
@@ -325,8 +332,8 @@ for (const scrollbars of ['system', 'classic']) {
         try {return document.body.getBoundingClientRect().width;}
         finally {root.style.removeProperty('width');}
       });
-      expect(preferredWidth).toBe(480);
-      await page.setViewportSize({width: 480, height: 600});
+      expect(preferredWidth).toBe(420);
+      await page.setViewportSize({width: 420, height: 600});
       if (scrollbars === 'classic') {
         await page.addStyleTag({content: 'body::-webkit-scrollbar { width: 16px; }'});
       }
@@ -347,9 +354,9 @@ for (const scrollbars of ['system', 'classic']) {
         bodyWidth: body.width, subtitleFits: label.scrollWidth <= label.clientWidth,
         gutter: getComputedStyle(scroller).scrollbarGutter, scrollbarWidth: scroller.offsetWidth - scroller.clientWidth};
     });
-    expect(metrics.width).toBe(480);
-    expect(metrics.bodyWidth).toBeLessThanOrEqual(480);
-    expect(metrics.scrollWidth).toBeLessThanOrEqual(480);
+    expect(metrics.width).toBe(420);
+    expect(metrics.bodyWidth).toBeLessThanOrEqual(420);
+    expect(metrics.scrollWidth).toBeLessThanOrEqual(420);
     expect(metrics.height).toBeGreaterThan(metrics.clientHeight);
     expect(metrics.rightInset).toBeGreaterThanOrEqual(24);
     expect(metrics.subtitleFits).toBe(true);

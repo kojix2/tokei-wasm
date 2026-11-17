@@ -167,7 +167,8 @@ function showResults() {
   const {title, detail, results, warnings, skipped, analyzedAt} = current;
   const total = results.Total;
   $('#results-title').textContent = title;
-  const at = new Date(analyzedAt).toLocaleString();
+  const isPopup = document.documentElement.dataset.extensionView === 'popup';
+  const at = isPopup ? '' : new Date(analyzedAt).toLocaleString();
   $('#results-subtitle').textContent = [detail?.ref, at, skipped ? `${fmt(skipped)} omitted` : ''].filter(Boolean).join(' · ');
   $('#stat-code').textContent = fmt(total.code);
   $('#stat-languages').textContent = fmt(languageEntries().length);
@@ -179,7 +180,7 @@ function showResults() {
   else note.classList.add('hidden');
   $('#results').classList.remove('hidden');
   renderTable(); renderCharts();
-  if (document.documentElement.dataset.extensionView !== 'popup') {
+  if (!isPopup) {
     $('#results').scrollIntoView({behavior: 'smooth', block: 'start'});
   }
 }
