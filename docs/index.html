@@ -20,8 +20,6 @@
   </header>
 
   <main>
-    <p class="intro">Count code, comments and blank lines. All in your browser.</p>
-
     <section aria-label="Analyze source code">
       <div class="tabs" role="tablist" aria-label="Source selection">
         <button type="button" id="tab-github" aria-selected="true" role="tab" aria-controls="github-panel">GitHub</button>
@@ -34,7 +32,7 @@
             <input id="repo-url" type="text" placeholder="owner/repository or GitHub URL" autocomplete="url" spellcheck="false" required>
             <button type="submit" class="primary" id="analyze-button">Analyze</button>
           </div>
-          <p class="helper">Public repositories. Try <button type="button" id="example" class="text-button">kojix2/tokei-api</button>.</p>
+          <p class="helper">Try <button type="button" id="example" class="text-button">kojix2/tokei-api</button>.</p>
         </form>
       </div>
       <div class="hidden" id="local-panel" role="tabpanel" aria-labelledby="tab-local">
@@ -108,6 +106,6 @@
     </section>
   </main>
 
-  <footer>Powered by <a href="https://github.com/XAMPPRocky/tokei" target="_blank" rel="noopener noreferrer">Rust tokei</a>.</footer>
+  <footer>Powered by <a href="https://github.com/XAMPPRocky/tokei" target="_blank" rel="noopener noreferrer">tokei</a>.</footer>
 </body>
 </html>

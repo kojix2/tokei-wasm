@@ -28,7 +28,6 @@ h3 { font-size: 14px; font-weight: 600; }
 .site-header h1 a { text-decoration: none; }
 .site-header h1 span { color: var(--muted); font-size: 14px; font-weight: 400; letter-spacing: normal; }
 .site-header > a, .helper, .limits, footer { color: var(--muted); font-size: 12px; }
-.intro { color: var(--muted); margin-bottom: 30px; }
 .tabs { display: flex; gap: 24px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
 .tabs button { padding: 0 0 10px; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); }
 .tabs [aria-selected="true"] { color: #242424; border-bottom-color: currentColor; }
@@ -107,7 +106,6 @@ footer { margin: 45px 0 24px; }
 @media (max-width: 560px) {
   body { padding: 0 20px; }
   .site-header { padding-top: 22px; }
-  .intro { max-width: 290px; margin-bottom: 24px; }
   .primary { padding-inline: 14px; }
   .results { margin-top: 30px; padding-top: 22px; }
   .section-heading { flex-wrap: wrap; gap: 12px; }
