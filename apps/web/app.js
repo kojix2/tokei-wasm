@@ -1,4 +1,5 @@
 // Source analysis runs in worker.js; this module handles input, results and exports.
+import './appearance.js';
 import {isExcluded} from './exclude.js';
 import {repositoryFileURL} from './repositories.js';
 import {languageColor, loadLanguageColors} from './language-colors.js';

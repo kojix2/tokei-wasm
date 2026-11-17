@@ -84,7 +84,7 @@ test('packages contain runnable browser-specific manifests, real Wasm and licens
       }
       const wasm = await readFile(join(temporary, target, 'pkg/tokei_wasm_bg.wasm'));
       assert.ok(WebAssembly.validate(wasm));
-      for (const name of ['index.html', 'app.js', 'worker.js', 'exclude.js', 'language-colors.js', 'style.css',
+      for (const name of ['index.html', 'app.js', 'appearance.js', 'worker.js', 'exclude.js', 'language-colors.js', 'style.css',
         'popup.html', 'popup.css', 'extension-page.js', 'results.js', 'LICENSE', 'third-party/tokei-MIT.txt', 'third-party/tokei-Apache-2.0.txt',
         'third-party/home-MIT.txt', 'third-party/home-Apache-2.0.txt']) {
         assert.ok((await readFile(join(temporary, target, name))).length, name);

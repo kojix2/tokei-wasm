@@ -6,7 +6,7 @@ import {createManifest, root, targets as extensionTargets, version} from './lib/
 
 const allTargets = ['web', ...extensionTargets];
 const appFiles = [
-  'index.html', 'app.js', 'worker.js', 'repositories.js', 'hosts.js', 'archive.js', 'exclude.js', 'language-colors.js', 'style.css',
+  'index.html', 'app.js', 'appearance.js', 'worker.js', 'repositories.js', 'hosts.js', 'archive.js', 'exclude.js', 'language-colors.js', 'style.css',
   'favicon-16x16.png', 'favicon-32x32.png',
   'third-party/tokei-MIT.txt', 'third-party/tokei-Apache-2.0.txt',
   'third-party/home-MIT.txt', 'third-party/home-Apache-2.0.txt',

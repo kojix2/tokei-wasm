@@ -96,6 +96,57 @@ test('charts update with new results and handle files with no lines or code', as
   await expect(page.locator('#composition-chart')).toHaveAttribute('aria-label', 'Code 0% · Comments 50% · Blanks 50%');
 });
 
+test('appearance updates existing results and survives reloading without changing counts', async ({page}) => {
+  await selectFiles(page);
+  const normalSize = await page.locator('#stat-code').evaluate(element => parseFloat(getComputedStyle(element).fontSize));
+  const toggle = page.getByRole('button', {name: 'Appearance', exact: true});
+  const panel = page.getByRole('region', {name: 'Appearance', exact: true});
+  await expect(panel).toBeHidden();
+  await toggle.click();
+  const saturation = page.getByRole('slider', {name: 'Saturation', exact: true});
+  await saturation.focus();
+  await saturation.press('Home');
+  await expect(page.locator('.bar-track span').first()).toHaveCSS('filter', 'saturate(0)');
+  await expect(page.locator('.language-swatch').first()).toHaveCSS('filter', 'saturate(0)');
+  await expect(page.locator('#saturation-value')).toHaveText('Mono');
+  for (let i = 0; i < 5; i++) await saturation.press('ArrowRight');
+  await expect(page.locator('.bar-track span').first()).toHaveCSS('filter', 'saturate(0.5)');
+  await expect(page.locator('#saturation-value')).toHaveText('50%');
+  await saturation.press('Home');
+  await page.getByLabel('Text size', {exact: true}).selectOption('large');
+  await expect(page.locator('#stat-code')).toHaveCSS('font-size', `${normalSize * 1.125}px`);
+  await expect(page.locator('#stat-code')).toHaveText('2');
+  await page.getByLabel('Text size', {exact: true}).press('Escape');
+  await expect(panel).toBeHidden();
+  await expect(toggle).toBeFocused();
+  await page.reload();
+  await selectFiles(page);
+  await expect(page.locator('.bar-track span').first()).toHaveCSS('filter', 'saturate(0)');
+  await expect(page.locator('#stat-code')).toHaveCSS('font-size', `${normalSize * 1.125}px`);
+  await toggle.click();
+  await expect(saturation).toHaveValue('0');
+  await expect(page.getByLabel('Text size', {exact: true})).toHaveValue('large');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('appearance and analysis remain usable when preference storage is unavailable', async ({page}) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', {get() {throw Error('Storage blocked');}});
+  });
+  await page.reload();
+  const normalSize = await page.locator('#stat-code').evaluate(element => parseFloat(getComputedStyle(element).fontSize));
+  await page.getByRole('button', {name: 'Appearance', exact: true}).click();
+  await page.getByRole('slider', {name: 'Saturation', exact: true}).press('Home');
+  await page.getByLabel('Text size', {exact: true}).selectOption('small');
+  await selectFiles(page);
+  await expect(page.locator('.bar-track span').first()).toHaveCSS('filter', 'saturate(0)');
+  await expect(page.locator('#stat-code')).toHaveCSS('font-size', `${normalSize * 0.875}px`);
+  await expect(page.locator('#stat-code')).toHaveText('2');
+  expect(errors).toEqual([]);
+});
+
 test('language chart shows the top eight without changing when the table is filtered', async ({page}) => {
   const extensions = ['rs', 'py', 'js', 'ts', 'css', 'rb', 'cr', 'go', 'c', 'java'];
   await selectFiles(page, extensions.map((extension, index) => source(`source.${extension}`, 'x\n'.repeat(10 - index))));

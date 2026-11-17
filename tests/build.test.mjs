@@ -9,7 +9,7 @@ test('all three distributions use identical shared runtime and engine assets', a
   const temporary = await mkdtemp(join(tmpdir(), 'tokei-apps-'));
   try {
     await buildApplications({outDir: temporary});
-    for (const file of ['app.js', 'worker.js', 'pkg/tokei_wasm.js', 'pkg/tokei_wasm_bg.wasm']) {
+    for (const file of ['app.js', 'appearance.js', 'worker.js', 'pkg/tokei_wasm.js', 'pkg/tokei_wasm_bg.wasm']) {
       const web = await readFile(join(temporary, 'web', file));
       assert.deepEqual(await readFile(join(temporary, 'chrome', file)), web, `Chrome ${file}`);
       assert.deepEqual(await readFile(join(temporary, 'firefox', file)), web, `Firefox ${file}`);

@@ -122,6 +122,30 @@ test('non-repository pages show a short prompt and keep manual input in the deta
   expect(await detail.evaluate(() => window.cspViolations)).toEqual([]);
 });
 
+test('appearance preferences persist across popup reopenings and stay in sync with detail tabs', async () => {
+  const popup = await toolbarClick('https://example.com/');
+  await popup.getByRole('button', {name: 'Appearance', exact: true}).click();
+  await popup.getByRole('slider', {name: 'Saturation', exact: true}).press('Home');
+  await popup.getByLabel('Text size', {exact: true}).selectOption('large');
+  await expect(popup.locator('body')).toHaveCSS('font-size', '15.75px');
+  expect(await popup.evaluate(() => document.body.scrollWidth <= innerWidth)).toBe(true);
+  const next = context.waitForEvent('page');
+  await popup.getByRole('button', {name: 'Open details', exact: true}).click();
+  const detail = await next;
+  await expect(detail.locator('body')).toHaveCSS('font-size', '18px');
+  await expect(detail.locator('#color-saturation')).toHaveValue('0');
+  const reopened = await toolbarClick('https://example.com/');
+  await reopened.getByRole('button', {name: 'Appearance', exact: true}).click();
+  await expect(reopened.getByLabel('Text size', {exact: true})).toHaveValue('large');
+  await expect(reopened.getByRole('slider', {name: 'Saturation', exact: true})).toHaveValue('0');
+  await reopened.getByLabel('Text size', {exact: true}).selectOption('small');
+  await reopened.getByRole('slider', {name: 'Saturation', exact: true}).press('End');
+  await expect(detail.locator('body')).toHaveCSS('font-size', '14px');
+  await expect(detail.locator('#color-saturation')).toHaveValue('100');
+  expect(await detail.evaluate(() => window.cspViolations)).toEqual([]);
+  expect(await reopened.evaluate(() => window.cspViolations)).toEqual([]);
+});
+
 test('a different repository never displays a previous repository cache', async () => {
   await context.route('https://api.github.com/**', route => route.fulfill({status: 404, json: {message: 'Not Found'}}));
   const page = await toolbarClick('https://example.com/');

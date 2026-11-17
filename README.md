@@ -19,6 +19,8 @@ Open http://127.0.0.1:8000. Enter a GitHub URL or `owner/repository`, or select 
 
 Results include language and file counts, charts, search, sorting, and JSON/CSV exports. Local source contents stay in the browser. Hosted analysis uses a single commit for downloads and source links.
 
+The Appearance gear adjusts language color saturation (0% is monochrome) and text size. Preferences are saved on the device and shared between extension views.
+
 ## Build
 
 ```sh
