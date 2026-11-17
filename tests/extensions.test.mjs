@@ -93,11 +93,13 @@ test('packages contain runnable browser-specific manifests, real Wasm and licens
       assert.match(popup, /data-extension-view="popup"/);
       assert.match(popup, /src="extension-page.js"/);
       assert.match(popup, /href="popup.css"/);
-      assert.doesNotMatch(popup, /local-panel|files-input|folder-input|tab-local|Choose files|Drop a folder/);
-      assert.match(popup, /repository-provider/);
+      assert.doesNotMatch(popup, /local-panel|files-input|folder-input|tab-local|Choose files|Drop a folder|repo-url|repository-provider|hosting-support/);
+      assert.match(popup, /id="refresh"/);
       const detail = await readFile(join(temporary, target, 'index.html'), 'utf8');
       assert.match(detail, /data-extension-view="tab"/);
       assert.match(detail, /src="extension-page.js"/);
+      assert.match(detail, /id="repo-url"/);
+      assert.match(detail, /id="repository-provider"/);
       assert.doesNotMatch(detail, /local-panel|files-input|folder-input|tab-local/);
       assert.deepEqual(await readdir(join(temporary, target, 'pkg')), ['tokei_wasm.js', 'tokei_wasm_bg.wasm']);
       const archive = join(temporary, `tokei-wasm-${target}-${version}.zip`);

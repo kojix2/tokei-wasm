@@ -30,13 +30,13 @@ After rebuilding, reload the extension from the browser's extension management p
 
 ## Use
 
-Visit a supported repository and click the toolbar icon. Analysis covers the entire default branch, including when the active page shows another branch, a file, an issue, or a pull request. On other pages, enter a repository URL.
+Visit a supported repository and click the toolbar icon to see its metrics. Analysis covers the entire default branch, including when the active page shows another branch, a file, an issue, or a pull request. Other pages show a short prompt.
 
 Keep the popup open until analysis finishes. Closing it stops unfinished work. Open details opens the full interface in a tab; completed results transfer without another download, while unfinished analysis restarts there.
 
-The popup shows counts and a language chart. The details tab adds file counts, search, sorting, a line-composition chart, and JSON/CSV exports. The interface is in English.
+The popup shows counts and a language chart. Refresh reruns analysis or retries a failure. URL input and server settings are in the details tab, along with file counts, search, sorting, a line-composition chart, and JSON/CSV exports. The interface is in English.
 
-Only the latest completed result is stored locally: counts, filenames, host, revision, and analysis time, without source contents. Reopening the same repository within five minutes restores it. Analyze refreshes it. Storage failures prevent restoration but leave analysis usable.
+Only the latest completed result is stored locally: counts, filenames, host, revision, and analysis time, without source contents. Reopening the same repository within five minutes restores it. Storage failures prevent restoration but leave analysis usable.
 
 ## Supported hosts
 
@@ -52,7 +52,7 @@ Only the latest completed result is stored locally: counts, filenames, host, rev
 | Hugging Face | `huggingface.co` / `hf.co`: models, datasets, and Spaces |
 | Self-hosted GitLab / Forgejo / Gitea | HTTPS servers at the origin root; custom ports and URL prefixes unsupported |
 
-For a self-hosted server, choose Other Git servers → Server type and enter the repository URL. Analyze requests access only to that origin. The origin and server type are remembered for later toolbar use. After revoking access, click Analyze to grant it again.
+For a self-hosted server, open its repository and select Open details. The URL is filled in; choose Other Git servers → Server type, then Analyze to grant access to that origin. The origin and server type are remembered for later toolbar use. After revoking access, use Refresh in the popup or Analyze in the details tab to grant it again.
 
 SourceForge supports Git code pages, not project downloads, SVN, or Mercurial. It reads Allura code tables; browser challenges or HTML changes can prevent retrieval. Remote page scripts are not executed.
 

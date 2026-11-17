@@ -4,7 +4,8 @@ import {repositoryFileURL} from './repositories.js';
 import {languageColor, loadLanguageColors} from './language-colors.js';
 const $ = (sel) => document.querySelector(sel);
 const fmt = (value) => Number(value || 0).toLocaleString('en-US');
-const sourceControls = ['analyze-button', 'folder-input', 'files-input', 'choose-folder', 'choose-files'].map(id => $(`#${id}`)).filter(Boolean);
+const repositoryInput = $('#repo-url');
+const sourceControls = ['analyze-button', 'refresh', 'folder-input', 'files-input', 'choose-folder', 'choose-files'].map(id => $(`#${id}`)).filter(Boolean);
 let worker;
 let busy = false;
 let activeRequest = 0;
@@ -39,7 +40,7 @@ $('.tabs')?.addEventListener('keydown', ev => {
     $('#tab-github').getAttribute('aria-selected') === 'true' ? 'local' : 'github';
   setTab(name); $(`#tab-${name}`).focus();
 });
-$('#example').addEventListener('click', () => {$('#repo-url').value = 'https://github.com/kojix2/tokei-wasm'; $('#repo-url').focus();});
+$('#example')?.addEventListener('click', () => {repositoryInput.value = 'https://github.com/kojix2/tokei-wasm'; repositoryInput.focus();});
 
 function setBusy(value) {
   busy = value;
@@ -78,10 +79,10 @@ function run(message) {
     worker.postMessage({...message, id});
   } catch (err) {showError(err.message);}
 }
-$('#github-form').addEventListener('submit', (ev) => {
+$('#github-form')?.addEventListener('submit', (ev) => {
   ev.preventDefault();
   if ($('#analyze-button').disabled) return;
-  repositoryHandler($('#repo-url').value);
+  repositoryHandler(repositoryInput.value);
 });
 function runFiles(files) {
   if (files?.length && !busy) {
@@ -349,7 +350,7 @@ $('#download-csv').addEventListener('click',()=>{
 
 // Bookmarkable links work on project pages: https://owner.github.io/project/?repo=owner/repository
 export function analyzeRepository(repo) {
-  $('#repo-url').value = repo;
+  if (repositoryInput) repositoryInput.value = repo;
   return repositoryHandler(repo);
 }
 
@@ -362,7 +363,7 @@ export function restoreResult(data) {
   sortKey = 'code'; sortDesc = true; searchQuery = '';
   $('#language-search').value = '';
   setTab(data.detail ? 'github' : 'local');
-  if (data.detail) $('#repo-url').value = data.detail.input || `${data.detail.owner}/${data.detail.repo}`;
+  if (data.detail && repositoryInput) repositoryInput.value = data.detail.input || `${data.detail.owner}/${data.detail.repo}`;
   showResults();
 }
 

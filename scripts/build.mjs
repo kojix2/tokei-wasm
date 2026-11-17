@@ -49,17 +49,20 @@ export async function buildApplications({sourceRoot = root, outDir = join(root, 
     if (manifest) {
       await writeFile(join(directory, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
     }
-    const html = (await readFile(join(directory, 'index.html'), 'utf8'))
+    const sourceHTML = await readFile(join(directory, 'index.html'), 'utf8');
+    const renderHTML = (popup = false) => sourceHTML
+      .replace(/<!-- (full|popup)-only -->([\s\S]*?)<!-- \/\1-only -->/g,
+        (_, view, content) => (view === 'popup') === popup ? content : '')
       .replace(/<!-- (web|extension)-only -->([\s\S]*?)<!-- \/\1-only -->/g,
         (_, app, content) => (app === 'extension') === !!manifest ? content : '');
     if (manifest) {
-      const extensionHTML = html.replace('src="app.js"', 'src="extension-page.js"')
+      const extensionHTML = popup => renderHTML(popup).replace('src="app.js"', 'src="extension-page.js"')
         .replace('id="github-panel" role="tabpanel" aria-labelledby="tab-github"', 'id="github-panel"');
-      await writeFile(join(directory, 'index.html'), extensionHTML.replace('<html lang="en">', '<html lang="en" data-extension-view="tab">'));
-      await writeFile(join(directory, 'popup.html'), extensionHTML
+      await writeFile(join(directory, 'index.html'), extensionHTML(false).replace('<html lang="en">', '<html lang="en" data-extension-view="tab">'));
+      await writeFile(join(directory, 'popup.html'), extensionHTML(true)
         .replace('<html lang="en">', '<html lang="en" data-extension-view="popup">')
         .replace('<link rel="stylesheet" href="style.css">', '<link rel="stylesheet" href="style.css">\n  <link rel="stylesheet" href="popup.css">'));
-    } else await writeFile(join(directory, 'index.html'), html);
+    } else await writeFile(join(directory, 'index.html'), renderHTML());
     outputs.push(directory);
     if (packageZip && extensionTargets.includes(target)) {
       const archive = resolve(outDir, `tokei-wasm-${target}-${version}.zip`);

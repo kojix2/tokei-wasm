@@ -17,7 +17,10 @@
   <header class="site-header">
     <h1><a href="index.html">tokei</a> <span>/ wasm</span></h1>
     <!-- extension-only -->
-    <button type="button" id="open-details">Open details ↗</button>
+    <div class="popup-actions">
+      <button type="button" id="refresh" disabled>Refresh</button>
+      <button type="button" id="open-details">Open details ↗</button>
+    </div>
     <!-- /extension-only -->
     <a href="https://github.com/kojix2/tokei-wasm" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
   </header>
@@ -30,6 +33,7 @@
         <button type="button" id="tab-local" aria-selected="false" tabindex="-1" role="tab" aria-controls="local-panel">Local files</button>
       </div>
       <!-- /web-only -->
+      <!-- full-only -->
       <div id="github-panel" role="tabpanel" aria-labelledby="tab-github">
         <form id="github-form">
           <label class="visually-hidden" for="repo-url">Public Git repository</label>
@@ -48,6 +52,7 @@
           <!-- /extension-only -->
         </form>
       </div>
+      <!-- /full-only -->
       <!-- web-only -->
       <div class="hidden" id="local-panel" role="tabpanel" aria-labelledby="tab-local">
         <div class="file-drop" id="drop-zone">
@@ -62,6 +67,9 @@
         </div>
       </div>
       <!-- /web-only -->
+      <!-- popup-only -->
+      <p id="popup-message" class="helper hidden" role="status"></p>
+      <!-- /popup-only -->
       <div class="progress-box hidden" id="progress-box" role="status" aria-live="polite">
         <div class="progress-top"><span id="progress-label">Loading…</span><span id="progress-count"></span><button id="cancel" class="text-button" type="button">Cancel</button></div>
         <progress id="progress-fill" max="100" aria-label="Analysis progress"></progress>
@@ -121,6 +129,8 @@
     </section>
   </main>
 
+  <!-- full-only -->
   <footer>Powered by <a href="https://github.com/XAMPPRocky/tokei" target="_blank" rel="noopener noreferrer">tokei</a>.</footer>
+  <!-- /full-only -->
 </body>
 </html>

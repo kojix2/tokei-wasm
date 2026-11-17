@@ -5,18 +5,16 @@ html { width: 480px; min-width: 480px; max-height: 600px; overflow: hidden; }
 /* Let classic scrollbars reduce the available width. Keep extra padding for
    overlay scrollbars, which do not reserve a gutter even with stable set. */
 body { width: 480px; max-height: 600px; margin: 0; padding: 0 28px 0 20px; overflow-y: auto; scrollbar-gutter: stable; font-size: 14px; }
-.site-header { padding: 16px 0 14px; }
-.site-header > a { display: none; }
-.site-header h1 { font-size: 22px; }
-#open-details { display: block; font-size: 12px; padding: 6px 10px; }
-.form-row input { width: 0; padding: 8px 10px; }
-.primary { padding: 8px 14px; }
-.helper, footer { font-size: 12px; overflow-wrap: anywhere; }
+.site-header { justify-content: flex-end; padding: 12px 0 8px; }
+.site-header > a, .site-header h1 { display: none; }
+.popup-actions { display: flex; gap: 8px; }
+.popup-actions button { font-size: 12px; padding: 6px 10px; }
+.helper { font-size: 12px; overflow-wrap: anywhere; }
 .limits, .charts figure:last-child, .table-heading, .table-scroll,
 .section-heading .actions { display: none; }
 .progress-box { margin-top: 14px; }
 .progress-top { font-size: 12px; gap: 6px 10px; }
-.results { margin-top: 18px; padding-top: 14px; }
+.results { margin-top: 0; padding-top: 4px; border-top: 0; }
 .section-heading h2 { font-size: 18px; }
 .section-heading > div { min-width: 0; max-width: 100%; }
 .stats { margin: 14px 0; gap: 8px; }
@@ -28,4 +26,3 @@ figcaption { margin-bottom: 10px; }
 .language-chart { gap: 7px; }
 .language-chart li { grid-template-columns: minmax(80px, 110px) 1fr max-content; gap: 10px; font-size: 12px; }
 .bar-track { height: 10px; }
-footer { margin: 16px 0; line-height: 1.5; }

@@ -66,6 +66,10 @@ test('popup analyzes the active repository and reuses results on reopen and in t
   await expect(page.locator('#stat-code')).toHaveText('1');
   await expect(page.locator('#stat-lines')).toHaveText('3');
   await expect(page.locator('#results-title')).toHaveText('acme/demo');
+  await expect(page.locator('#repo-url, #github-form, .server-options')).toHaveCount(0);
+  await expect(page.locator('.hosting-support, footer')).toHaveCount(0);
+  await expect(page.locator('.site-header h1')).toBeHidden();
+  await expect(page.locator('#refresh')).toBeEnabled();
   expect(await page.locator('html').evaluate(element => element.getBoundingClientRect().width)).toBe(480);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(context.pages().filter(page => page.url().startsWith(origin))).toHaveLength(1);
@@ -96,11 +100,12 @@ test('popup analyzes the active repository and reuses results on reopen and in t
   expect(errors).toEqual([]);
 });
 
-test('non-repository pages provide hosting input without local file controls in either view', async () => {
+test('non-repository pages show a short prompt and keep manual input in the detail tab', async () => {
   const page = await toolbarClick('https://example.com/');
   await expect(page.locator('#results')).toBeHidden();
-  await expect(page.locator('#repo-url')).toBeVisible();
-  await expect(page.locator('.hosting-support')).toContainText('Codeberg');
+  await expect(page.locator('#repo-url, .hosting-support')).toHaveCount(0);
+  await expect(page.locator('#popup-message')).toHaveText('Open a supported public repository to view its metrics.');
+  await expect(page.locator('#refresh')).toBeDisabled();
   await expect(page.locator('#local-panel, #tab-local, input[type=file]')).toHaveCount(0);
   const next = context.waitForEvent('page');
   await page.locator('#open-details').click();
@@ -121,7 +126,7 @@ test('a different repository never displays a previous repository cache', async 
   const next = await toolbarClick('https://github.com/acme/private');
   await expect(next.locator('#results')).toBeHidden();
   await expect(next.locator('#error-alert')).toContainText('not found or private');
-  await expect(next.locator('#analyze-button')).toBeEnabled();
+  await expect(next.locator('#refresh')).toBeEnabled();
 });
 
 test('host browser checks are explained without attempting to parse the challenge as code', async () => {
@@ -130,7 +135,31 @@ test('host browser checks are explained without attempting to parse the challeng
   const page = await toolbarClick('https://git.sr.ht/~alice/demo');
   await expect(page.locator('#error-alert')).toContainText('browser check');
   await expect(page.locator('#results')).toBeHidden();
-  await expect(page.locator('#analyze-button')).toBeEnabled();
+  await expect(page.locator('#refresh')).toBeEnabled();
+});
+
+test('Refresh retries the current repository after an error and updates completed metrics', async () => {
+  let available = false;
+  let source = 'fn main() {}\n';
+  await context.route('https://api.github.com/**', route => {
+    if (!available) return route.fulfill({status: 404, json: {message: 'Not Found'}});
+    const url = route.request().url();
+    const base = 'https://api.github.com/repos/acme/demo';
+    return route.fulfill({json: url === base ? {default_branch: 'main'} : url.includes('/commits/') ?
+      {sha: 'commit123', commit: {tree: {sha: 'tree123'}}} :
+      {tree: [{path: 'main.rs', type: 'blob', mode: '100644', size: 30}]}});
+  });
+  await context.route('https://raw.githubusercontent.com/acme/demo/**', route => route.fulfill({body: source}));
+  const page = await toolbarClick('https://github.com/acme/demo');
+  await expect(page.locator('#error-alert')).toContainText('not found or private');
+  available = true;
+  await page.locator('#refresh').click();
+  await expect(page.locator('#stat-code')).toHaveText('1');
+  await expect(page.locator('#error-alert')).toBeHidden();
+  source = 'fn main() {\n}\n';
+  await page.locator('#refresh').click();
+  await expect(page.locator('#stat-code')).toHaveText('2');
+  await expect(page.locator('#results-title')).toHaveText('acme/demo');
 });
 
 for (const host of ['gitlab.com', 'codeberg.org', 'gitee.com', 'git.sr.ht']) {
@@ -184,9 +213,13 @@ for (const granted of [false, true]) {
       if (url.includes('/commits/')) return route.fulfill({json: {sha: revision}});
       return route.fulfill({json: {default_branch: 'main'}});
     });
-    const page = await toolbarClick('https://example.com');
-    await page.locator('#repo-url').fill('https://git.example.org/acme/demo');
-    await page.locator('.server-options summary').click();
+    const popup = await toolbarClick('https://git.example.org/acme/demo');
+    await expect(popup.locator('#popup-message')).toHaveText('Open details to configure this Git server.');
+    const next = context.waitForEvent('page');
+    await popup.locator('#open-details').click();
+    const page = await next;
+    await expect(page.locator('#repo-url')).toHaveValue('https://git.example.org/acme/demo');
+    await expect(page.locator('.server-options')).toHaveAttribute('open', '');
     await page.locator('#repository-provider').selectOption('forgejo');
     await page.locator('#analyze-button').click();
     if (granted) await expect(page.locator('#stat-code')).toHaveText('1');
@@ -268,7 +301,7 @@ for (const scrollbars of ['system', 'classic']) {
       await ready;
       const url = route.request().url();
       const base = 'https://api.github.com/repos/acme/demo';
-      const branch = 'feature/' + 'long-branch-name-'.repeat(15);
+      const branch = 'feature/' + 'long-branch-name-'.repeat(40);
       const json = url === base ? {default_branch: branch} : url.includes('/commits/') ?
         {sha: 'commit123', commit: {tree: {sha: 'tree123'}}} :
         {truncated: true, tree: ['rs', 'py', 'js', 'ts', 'rb', 'go', 'c', 'java'].map(ext =>
@@ -301,7 +334,7 @@ for (const scrollbars of ['system', 'classic']) {
     await expect(page.locator('#results')).toBeVisible();
     await expect(page.locator('#language-chart li')).toHaveCount(8);
     await expect(page.locator('#warning-box')).toBeVisible();
-    const before = await page.locator('#repo-url').boundingBox();
+    const before = await page.locator('.stats').boundingBox();
     const metrics = await page.evaluate(() => {
       const root = document.documentElement;
       const scroller = document.body;
@@ -323,9 +356,9 @@ for (const scrollbars of ['system', 'classic']) {
     expect(metrics.gutter).toBe('stable');
     if (scrollbars === 'classic') expect(metrics.scrollbarWidth).toBeGreaterThan(0);
     await page.evaluate(() => document.body.scrollTo(0, document.body.scrollHeight));
-    await expect(page.locator('footer')).toBeInViewport();
+    await expect(page.locator('#language-chart li').last()).toBeInViewport();
     await page.evaluate(() => document.body.scrollTo(0, 0));
-    expect((await page.locator('#repo-url').boundingBox()).width).toBe(before.width);
+    expect((await page.locator('.stats').boundingBox()).width).toBe(before.width);
     expect(await page.evaluate(() => window.cspViolations)).toEqual([]);
   });
 }

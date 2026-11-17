@@ -17,7 +17,7 @@ test('all three distributions use identical shared runtime and engine assets', a
     const web = await readdir(join(temporary, 'web'));
     const webHTML = await readFile(join(temporary, 'web/index.html'), 'utf8');
     assert.match(webHTML, /id="local-panel"/);
-    assert.doesNotMatch(webHTML, /id="open-details"|id="repository-provider"|<!-- (web|extension)-only -->/);
+    assert.doesNotMatch(webHTML, /id="open-details"|id="repository-provider"|id="popup-message"|<!-- (web|extension|full|popup)-only -->/);
     assert.ok(web.includes('.nojekyll'));
     assert.ok(!web.includes('manifest.json'));
     assert.ok(!web.includes('background.js'));
@@ -29,8 +29,13 @@ test('all three distributions use identical shared runtime and engine assets', a
       assert.ok(!files.includes('.nojekyll'));
       const html = await readFile(join(temporary, target, 'popup.html'), 'utf8');
       assert.match(html, /id="open-details"/);
-      assert.match(html, /id="repository-provider"/);
-      assert.doesNotMatch(html, /id="local-panel"|<!-- (web|extension)-only -->/);
+      assert.match(html, /id="refresh"/);
+      assert.match(html, /id="popup-message"/);
+      assert.doesNotMatch(html, /id="local-panel"|id="repo-url"|id="repository-provider"|<footer>|<!-- (web|extension|full|popup)-only -->/);
+      const detailHTML = await readFile(join(temporary, target, 'index.html'), 'utf8');
+      assert.match(detailHTML, /id="repo-url"/);
+      assert.match(detailHTML, /id="repository-provider"/);
+      assert.doesNotMatch(detailHTML, /id="popup-message"|<!-- (web|extension|full|popup)-only -->/);
     }
     await writeFile(join(temporary, 'web', 'keep.txt'), 'web output');
     await buildApplications({outDir: temporary, targets: ['chrome', 'firefox']});

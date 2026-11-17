@@ -18,7 +18,7 @@ All three apps share plain JavaScript, HTML, CSS, and one Rust/Wasm engine. Ther
 | `tests/` | Node and browser tests |
 | `dist/` | Generated apps and ZIPs; ignored by Git |
 
-`scripts/build.mjs` copies shared assets and Wasm into each distribution. It selects `web-only` / `extension-only` HTML blocks and derives extension `popup.html` and `index.html` from the shared HTML. Extension views load `extension-page.js`; the popup also loads `popup.css`. Each distribution includes licenses and preserves relative runtime URLs.
+`scripts/build.mjs` copies shared assets and Wasm into each distribution. It selects `web-only` / `extension-only` and `full-only` / `popup-only` HTML blocks to derive each view. The popup omits repository input and server settings; the web app and details tab keep them. Extension views load `extension-page.js`; the popup also loads `popup.css`. Each distribution includes licenses and preserves relative runtime URLs.
 
 ## Analysis flow
 
