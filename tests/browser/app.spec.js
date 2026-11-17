@@ -5,6 +5,11 @@ import {join} from 'node:path';
 
 const source = (name, text) => ({name, mimeType: 'text/plain', buffer: Buffer.from(text)});
 const samples = [source('main.rs', 'fn main() {}\n// comment\n\n'), source('test.py', 'x = 1\n# comment\n\n')];
+const colorURL = 'https://raw.githubusercontent.com/ozh/github-colors/master/colors.json';
+const testColors = {
+  Rust: {color: '#dea584'}, Python: {color: '#3572A5'}, JavaScript: {color: '#f1e05a'},
+  TypeScript: {color: '#3178c6'}, 'C++': {color: '#f34b7d'},
+};
 async function selectFiles(page, files = samples) {
   await page.locator('#tab-local').click();
   await page.locator('#files-input').setInputFiles(files);
@@ -20,6 +25,7 @@ async function downloadText(download) {
 }
 
 test.beforeEach(async ({page}) => {
+  await page.route(colorURL, route => route.fulfill({json: testColors}));
   await page.goto('/');
 });
 
@@ -28,7 +34,7 @@ test('local analysis, details, search, sorting, and exports', async ({page}) => 
   const externalRequests = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('request', request => {
-    if (new URL(request.url()).origin !== new URL(page.url()).origin) externalRequests.push(request.url());
+    if (new URL(request.url()).origin !== new URL(page.url()).origin && request.url() !== colorURL) externalRequests.push(request.url());
   });
   await selectFiles(page, [...samples, source('binary.rs', '\0binary')]);
   await expect(page.locator('#stat-code')).toHaveText('2');
@@ -39,6 +45,11 @@ test('local analysis, details, search, sorting, and exports', async ({page}) => 
   await expect(page.locator('#language-chart li')).toHaveCount(2);
   await expect(page.locator('#language-chart')).toContainText('Rust');
   await expect(page.locator('#composition-legend')).toContainText('Comments');
+  for (const [name, color] of [['Rust', 'rgb(222, 165, 132)'], ['Python', 'rgb(53, 114, 165)']]) {
+    await expect(page.locator('#language-chart li').filter({hasText: name}).locator('.bar-track span')).toHaveCSS('background-color', color);
+    await expect(page.locator('.language-row').filter({hasText: name}).locator('.language-swatch')).toHaveCSS('background-color', color);
+    await expect(page.locator('.language-row').filter({hasText: name}).locator('.language-swatch')).toHaveAttribute('aria-hidden', 'true');
+  }
   await expect(page.locator('#warning-box')).toContainText('1 binary or unreadable');
   const row = page.locator('.language-row').filter({hasText: 'Rust'});
   await row.click();
@@ -94,6 +105,47 @@ test('language chart shows the top eight without changing when the table is filt
   await expect(page.locator('#language-chart li').last()).toHaveAttribute('aria-label', 'Go: 3 lines of code');
   await page.locator('#language-search').fill('Java');
   await expect(page.locator('#language-chart li')).toHaveCount(8);
+});
+
+test('language variants use GitHub colors consistently after sorting and filtering', async ({page}) => {
+  await selectFiles(page, [source('component.jsx', 'const app = <div />;\n'), source('module.hpp', 'int x;\n'), source('app.tsx', 'const app = <div />;\n')]);
+  const colors = [['JSX', 'rgb(241, 224, 90)'], ['C++ Header', 'rgb(243, 75, 125)'], ['TSX', 'rgb(49, 120, 198)']];
+  await page.locator('[data-sort="name"]').click();
+  for (const [name, color] of colors) {
+    await expect(page.locator('#language-chart li').filter({hasText: name}).locator('.bar-track span')).toHaveCSS('background-color', color);
+    await page.locator('#language-search').fill(name);
+    await expect(page.locator('.language-row')).toHaveCount(1);
+    await expect(page.locator('.language-swatch')).toHaveCSS('background-color', color);
+  }
+  await page.locator('#language-search').fill('');
+  await expect(page.locator('.language-swatch')).toHaveCount(3);
+});
+
+test('a failed palette request leaves local analysis usable in gray', async ({page}) => {
+  await page.route(colorURL, route => route.abort());
+  await page.reload();
+  await selectFiles(page);
+  await expect(page.locator('#stat-code')).toHaveText('2');
+  await expect(page.locator('.language-swatch').first()).toHaveCSS('background-color', 'rgb(133, 133, 133)');
+  await expect(page.locator('.bar-track span').first()).toHaveCSS('background-color', 'rgb(133, 133, 133)');
+});
+
+test('late colors update results without blocking local analysis', async ({page}) => {
+  let releaseColors;
+  const released = new Promise(resolve => {releaseColors = resolve;});
+  await page.route(colorURL, async route => {await released; await route.fulfill({json: testColors});});
+  await page.reload({waitUntil: 'domcontentloaded'});
+  try {
+    await selectFiles(page);
+    await expect(page.locator('.language-swatch').first()).toHaveCSS('background-color', 'rgb(133, 133, 133)');
+    const row = page.locator('.language-row').first();
+    await row.click();
+    releaseColors();
+    await expect(page.locator('.language-swatch').first()).toHaveCSS('background-color', 'rgb(222, 165, 132)');
+    await expect(page.locator('.bar-track span').first()).toHaveCSS('background-color', 'rgb(222, 165, 132)');
+    await expect(row).toBeFocused();
+    await expect(page.locator('.details-table')).toBeVisible();
+  } finally {releaseColors();}
 });
 
 test('folder selection excludes dependencies and retains relative filenames', async ({page}) => {

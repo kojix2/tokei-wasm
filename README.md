@@ -27,12 +27,12 @@ Use an HTTP server; opening `index.html` via `file://` cannot load browser modul
 - Analyze public GitHub repository root URLs, `owner/repository`, or GitHub SSH-style URLs. A `?repo=owner/repository` link starts analysis automatically.
 - Analyze local folders, individual files, or dropped folders/files without uploading source contents.
 - Count code, comments, and blank lines with upstream tokei, including nested comments, strings, and embedded languages.
-- View language bar charts and a code/comment/blank-line donut chart. Expand file-level counts, search filenames/languages, and sort the table.
+- View language bar charts and table markers in GitHub's language colors, plus a code/comment/blank-line donut chart. Expand file-level counts, search filenames/languages, and sort the table.
 - Cancel immediately and start another analysis. Failed/binary files and browser limits are reported without discarding successful results.
 - Download JSON including results, warnings, omitted-file counts, engine version, analysis time, and GitHub revision, or download per-file CSV.
 - Use the interface on desktop and mobile, with keyboard tabs, expandable rows, and status announcements.
 
-GitHub analysis pins downloads and source links to the same commit, so a moving branch does not mix revisions. Local analysis and charts run entirely in the browser, with no third-party chart or image service.
+GitHub analysis pins downloads and source links to the same commit, so a moving branch does not mix revisions. Local analysis and charts run entirely in the browser. The page fetches public language color metadata once; source contents are never sent with that request.
 
 ## Deploy to GitHub Pages
 
@@ -88,6 +88,7 @@ Local File objects ─────────┘                               
 
 - Rust wrapper: `wasm/src/lib.rs`, using `tokei = "=15.0.0"` with `default-features = false` and upstream `LanguageType::parse_from_slice`.
 - JavaScript collects bytes, applies browser limits, aggregates results, and renders the UI; it does not implement a replacement lexer.
+- Language colors load once per page from [ozh/github-colors](https://github.com/ozh/github-colors), an automatically updated JSON version of GitHub Linguist's colors. There is no bundled palette or manual color update step. `docs/language-colors.js` maps differing tokei names; missing colors or a failed/timed-out request use gray without blocking analysis.
 - Browser limits: **1,200 source files**, **1.5 MB per file**, **25 MB total**. GitHub responses also have a streamed per-file download limit. Oversized, binary, unreadable, or failed downloads count as omitted; excluded directories and unknown extensions are ignored before selection.
 - Dependency/build directories and most hidden directories are excluded by name; `.github` is allowed. This edition does **not** apply `.gitignore`, `.ignore`, or `.tokeignore` syntax.
 - Language detection uses file extensions and common special filenames; it does not inspect extensionless shebangs. Repository totals can differ from the native CLI's filesystem traversal.

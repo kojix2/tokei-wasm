@@ -1,5 +1,6 @@
 // Source analysis runs in worker.js; this module handles input, results and exports.
 import {isExcluded} from './languages.js';
+import {languageColor, loadLanguageColors} from './language-colors.js';
 const $ = (sel) => document.querySelector(sel);
 const fmt = (value) => Number(value || 0).toLocaleString('en-US');
 const sourceControls = ['analyze-button', 'folder-input', 'files-input', 'choose-folder', 'choose-files'].map(id => $(`#${id}`));
@@ -11,6 +12,12 @@ let sortKey = 'code';
 let sortDesc = true;
 let searchQuery = '';
 const expanded = new Set();
+
+loadLanguageColors().then(() => {
+  for (const element of document.querySelectorAll('[data-language]')) {
+    element.style.setProperty('--language-color', languageColor(element.dataset.language));
+  }
+});
 
 function setTab(name) {
   for (const choice of ['github', 'local']) {
@@ -220,11 +227,14 @@ function renderTable() {
   }
   for (const [name, stat] of sorted) {
     const row = document.createElement('tr'); row.className = 'language-row';
+    row.style.setProperty('--language-color', languageColor(name));
     const isOpen = expanded.has(name);
     row.tabIndex = 0;
     row.setAttribute('aria-expanded', String(isOpen));
     row.dataset.language = name;
     const first = row.insertCell();
+    const swatch = document.createElement('span'); swatch.className = 'language-swatch';
+    swatch.setAttribute('aria-hidden', 'true'); first.append(swatch);
     const strong = document.createElement('strong'); strong.textContent = name; first.append(strong);
     for (const value of [stat.reports.length,stat.code,stat.comments,stat.blanks,lineTotal(stat)]) createCell(value,row);
     tbody.append(row);
@@ -275,6 +285,8 @@ function renderCharts() {
   const maxCode = Math.max(1, ...languages.map(([, stats]) => stats.code));
   $('#language-chart').replaceChildren(...languages.map(([name, stats]) => {
     const row = document.createElement('li');
+    row.dataset.language = name;
+    row.style.setProperty('--language-color', languageColor(name));
     row.setAttribute('aria-label', `${name}: ${fmt(stats.code)} lines of code`);
     const label = document.createElement('span');
     label.className = 'chart-language'; label.textContent = name; label.title = name;
